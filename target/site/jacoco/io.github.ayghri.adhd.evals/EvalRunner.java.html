@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EvalRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">EvalRunner.java</span></div><h1>EvalRunner.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.ayghri.adhd.util.JsonLines;
+import io.github.ayghri.adhd.util.ProcResult;
+import io.github.ayghri.adhd.util.ProcRunner;
+import io.github.ayghri.adhd.util.PyKeyError;
+import io.github.ayghri.adhd.util.PyOsError;
+import io.github.ayghri.adhd.util.PyRuntimeError;
+import io.github.ayghri.adhd.util.PyValueError;
+import io.github.ayghri.adhd.util.PythonFloat;
+import io.github.ayghri.adhd.util.PythonJson;
+import io.github.ayghri.adhd.util.PythonStr;
+import io.github.ayghri.adhd.util.ShlexJoin;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+
+/** Port of {@code _condition_prompt} and {@code run_evaluations}. */
+public final class EvalRunner {
+
+    private EvalRunner() {}
+
+    public static String conditionPrompt(String task, String condition, Path skillPath) {
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        if (&quot;baseline&quot;.equals(condition)) {</span>
+<span class="fc" id="L37">            return task;</span>
+        }
+<span class="pc bpc" id="L39" title="1 of 2 branches missed.">        if (skillPath == null) {</span>
+<span class="nc" id="L40">            throw new PyValueError(&quot;--condition-skill is required for the &quot; + condition + &quot; condition&quot;);</span>
+        }
+<span class="fc" id="L42">        String instructions = JsonLines.readText(skillPath);</span>
+<span class="fc" id="L43">        return &quot;Follow the response-style skill below while completing the task. &quot;</span>
+                + &quot;Do not discuss or quote the skill.\n\n&quot;
+                + &quot;&lt;response_style&gt;\n&quot; + instructions + &quot;\n&lt;/response_style&gt;\n\n&quot;
+                + &quot;&lt;task&gt;\n&quot; + task + &quot;\n&lt;/task&gt;&quot;;
+    }
+
+    public static int runEvaluations(EvalOptions args, Path root, PrintStream out, PrintStream err) {
+<span class="fc" id="L50">        List&lt;JsonNode&gt; cases = JsonLines.readJsonl(args.cases);</span>
+<span class="fc" id="L51">        List&lt;String&gt; errors = CaseValidator.validateCases(cases);</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">        if (!errors.isEmpty()) {</span>
+<span class="nc" id="L53">            throw new PyValueError(String.join(&quot;\n&quot;, errors));</span>
+        }
+
+<span class="pc bpc" id="L56" title="1 of 4 branches missed.">        if (args.caseFilter != null &amp;&amp; !args.caseFilter.isEmpty()) {</span>
+<span class="fc" id="L57">            Set&lt;String&gt; known = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">            for (JsonNode item : cases) {</span>
+<span class="fc" id="L59">                known.add(item.get(&quot;id&quot;).textValue());</span>
+<span class="fc" id="L60">            }</span>
+<span class="fc" id="L61">            Set&lt;String&gt; unknown = new TreeSet&lt;&gt;(PythonStr.CODE_POINT_ORDER);</span>
+<span class="fc" id="L62">            unknown.addAll(args.caseFilter);</span>
+<span class="fc" id="L63">            unknown.removeAll(known);</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">            if (!unknown.isEmpty()) {</span>
+<span class="nc" id="L65">                throw new PyValueError(&quot;--case matched no evaluation case: &quot; + String.join(&quot;, &quot;, unknown));</span>
+            }
+        }
+
+<span class="fc" id="L69">        JsonNode config = JsonLines.loads(JsonLines.readText(args.runnerConfig));</span>
+<span class="fc" id="L70">        JsonNode runner = config.get(args.runner);</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">        if (runner == null) {</span>
+<span class="nc" id="L72">            throw new PyKeyError(args.runner);</span>
+        }
+<span class="fc" id="L74">        List&lt;String&gt; command = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        for (JsonNode part : runner.get(&quot;command&quot;)) {</span>
+<span class="fc" id="L76">            command.add(part.asText());</span>
+<span class="fc" id="L77">        }</span>
+<span class="fc" id="L78">        JsonNode formatNode = runner.get(&quot;response_format&quot;);</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">        String responseFormat = formatNode == null ? &quot;text&quot; : formatNode.asText();</span>
+
+        // Ordering is load-bearing: this guard must reject before any file is created or any
+        // process is spawned, which the ported unmetered test asserts on directly.
+<span class="fc bfc" id="L83" title="All 4 branches covered.">        if (!&quot;claude-json&quot;.equals(responseFormat) &amp;&amp; !args.allowUnmetered) {</span>
+<span class="fc" id="L84">            throw new PyRuntimeError(&quot;The &quot; + PythonStr.repr(responseFormat)</span>
+                    + &quot; response format never reports dollar cost; rerun with --allow-unmetered&quot;
+                    + &quot; only when the provider has a separate hard spending cap.&quot;);
+        }
+
+<span class="fc" id="L89">        Set&lt;CompletedKey&gt; done = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L90">        double reportedCost = 0.0;</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">        if (Files.exists(args.output)) {</span>
+<span class="fc" id="L92">            List&lt;JsonNode&gt; prior = JsonLines.readJsonl(args.output);</span>
+<span class="fc" id="L93">            done = CompletedKey.completedKeys(prior);</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">            for (JsonNode row : prior) {</span>
+<span class="fc" id="L95">                JsonNode condition = row.get(&quot;condition&quot;);</span>
+<span class="fc" id="L96">                JsonNode rowRunner = row.get(&quot;runner&quot;);</span>
+<span class="pc bpc" id="L97" title="2 of 4 branches missed.">                boolean sameCondition = condition != null &amp;&amp; condition.asText().equals(args.condition);</span>
+<span class="pc bpc" id="L98" title="2 of 4 branches missed.">                boolean sameRunner = rowRunner != null &amp;&amp; rowRunner.asText().equals(args.runner);</span>
+<span class="pc bpc" id="L99" title="2 of 4 branches missed.">                if (sameCondition &amp;&amp; sameRunner) {</span>
+<span class="fc" id="L100">                    JsonNode cost = row.get(&quot;cost_usd&quot;);</span>
+<span class="pc bpc" id="L101" title="2 of 4 branches missed.">                    reportedCost += cost == null || cost.isNull() ? 0.0 : cost.doubleValue();</span>
+                }
+<span class="fc" id="L103">            }</span>
+        }
+
+<span class="pc bpc" id="L106" title="2 of 4 branches missed.">        if (args.budgetUsd &lt;= 0 || args.budgetUsd &gt; 25) {</span>
+<span class="nc" id="L107">            throw new PyValueError(&quot;--budget-usd must be greater than 0 and no more than 25&quot;);</span>
+        }
+
+        try {
+<span class="fc" id="L111">            Path parent = args.output.toAbsolutePath().getParent();</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">            if (parent != null) {</span>
+<span class="fc" id="L113">                Files.createDirectories(parent);</span>
+            }
+<span class="fc" id="L115">            try (BufferedWriter handle = Files.newBufferedWriter(</span>
+                    args.output, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+
+<span class="fc bfc" id="L119" title="All 2 branches covered.">                for (int trial = 1; trial &lt;= args.trials; trial++) {</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">                    for (JsonNode item : cases) {</span>
+<span class="fc" id="L121">                        String caseId = item.get(&quot;id&quot;).textValue();</span>
+<span class="pc bpc" id="L122" title="1 of 4 branches missed.">                        if (args.caseFilter != null &amp;&amp; !args.caseFilter.isEmpty()</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">                                &amp;&amp; !args.caseFilter.contains(caseId)) {</span>
+<span class="fc" id="L124">                            continue;</span>
+                        }
+
+<span class="fc" id="L127">                        CompletedKey key = new CompletedKey(caseId, trial, args.condition, args.runner);</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">                        if (done.contains(key)) {</span>
+<span class="fc" id="L129">                            out.println(&quot;skip completed &quot; + args.condition + &quot; trial &quot; + trial + &quot;: &quot; + caseId);</span>
+<span class="fc" id="L130">                            continue;</span>
+                        }
+
+<span class="fc" id="L133">                        double remaining = args.budgetUsd - reportedCost;</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">                        if (remaining &lt;= 0) {</span>
+<span class="nc" id="L135">                            err.println(&quot;Budget exhausted; stopping.&quot;);</span>
+<span class="nc" id="L136">                            return 2;</span>
+                        }
+
+<span class="fc" id="L139">                        String prompt = conditionPrompt(</span>
+<span class="fc" id="L140">                                item.get(&quot;prompt&quot;).asText(), args.condition, args.conditionSkill);</span>
+
+<span class="fc" id="L142">                        List&lt;String&gt; invocation = new ArrayList&lt;&gt;(command);</span>
+<span class="fc" id="L143">                        JsonNode budgetFlag = runner.get(&quot;budget_flag&quot;);</span>
+<span class="pc bpc" id="L144" title="5 of 6 branches missed.">                        if (budgetFlag != null &amp;&amp; !budgetFlag.isNull() &amp;&amp; !budgetFlag.asText().isEmpty()) {</span>
+<span class="nc" id="L145">                            invocation.add(budgetFlag.asText());</span>
+<span class="nc" id="L146">                            invocation.add(PythonFloat.formatFixed(remaining, 4));</span>
+                        }
+<span class="fc" id="L148">                        invocation.add(prompt);</span>
+
+<span class="fc" id="L150">                        ProcResult completed = invokeWithRetries(invocation, root, args.retries);</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">                        if (completed.returncode() != 0) {</span>
+<span class="fc" id="L152">                            throw new PyRuntimeError(&quot;Runner failed after &quot; + (args.retries + 1)</span>
+<span class="fc" id="L153">                                    + &quot; attempts (&quot; + ShlexJoin.join(invocation.subList(0, invocation.size() - 1))</span>
+<span class="fc" id="L154">                                    + &quot;):\n&quot; + failureDetail(completed, responseFormat));</span>
+                        }
+
+<span class="fc" id="L157">                        ResponseParser.ParsedResponse parsed =</span>
+<span class="fc" id="L158">                                ResponseParser.parseResponse(completed.stdout(), responseFormat);</span>
+<span class="pc bpc" id="L159" title="1 of 4 branches missed.">                        if (!parsed.hasCost() &amp;&amp; !args.allowUnmetered) {</span>
+<span class="nc" id="L160">                            throw new PyRuntimeError(&quot;Runner did not report dollar cost; rerun with&quot;</span>
+                                    + &quot; --allow-unmetered only when the provider has a separate hard&quot;
+                                    + &quot; spending cap.&quot;);
+                        }
+<span class="fc" id="L164">                        reportedCost += parsed.costOrZero();</span>
+
+<span class="fc" id="L166">                        ObjectNode row = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L167">                        row.put(&quot;case_id&quot;, caseId);</span>
+<span class="fc" id="L168">                        row.put(&quot;trial&quot;, trial);</span>
+<span class="fc" id="L169">                        row.put(&quot;condition&quot;, args.condition);</span>
+<span class="fc" id="L170">                        row.put(&quot;runner&quot;, args.runner);</span>
+<span class="fc" id="L171">                        row.put(&quot;response&quot;, parsed.text());</span>
+<span class="fc" id="L172">                        row.set(&quot;usage&quot;, parsed.usage());</span>
+<span class="fc" id="L173">                        row.set(&quot;cost_usd&quot;, parsed.cost());</span>
+
+<span class="fc" id="L175">                        handle.write(PythonJson.dumps(row, false));</span>
+<span class="fc" id="L176">                        handle.write(&quot;\n&quot;);</span>
+<span class="fc" id="L177">                        handle.flush();</span>
+<span class="fc" id="L178">                        out.println(args.condition + &quot; trial &quot; + trial + &quot;: &quot; + caseId);</span>
+<span class="fc" id="L179">                    }</span>
+                }
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            }</span>
+<span class="nc" id="L182">        } catch (IOException exc) {</span>
+<span class="nc" id="L183">            throw PyOsError.from(exc, args.output);</span>
+<span class="fc" id="L184">        }</span>
+
+<span class="fc" id="L186">        out.println(&quot;Reported cost: $&quot; + PythonFloat.formatFixed(reportedCost, 4));</span>
+<span class="fc" id="L187">        return 0;</span>
+    }
+
+    private static ProcResult invokeWithRetries(List&lt;String&gt; invocation, Path root, int retries) {
+<span class="fc" id="L191">        ProcResult completed = null;</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        for (int attempt = 0; attempt &lt;= retries; attempt++) {</span>
+<span class="fc" id="L193">            completed = ProcRunner.run(invocation, root);</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">            if (completed.returncode() == 0) {</span>
+<span class="fc" id="L195">                break;</span>
+            }
+<span class="fc bfc" id="L197" title="All 2 branches covered.">            if (attempt &lt; retries) {</span>
+<span class="fc" id="L198">                sleepSeconds(Math.min(1L &lt;&lt; attempt, 5L));</span>
+            }
+        }
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">        if (completed == null) {</span>
+<span class="nc" id="L202">            throw new AssertionError(&quot;retry loop produced no result&quot;);</span>
+        }
+<span class="fc" id="L204">        return completed;</span>
+    }
+
+    private static String failureDetail(ProcResult completed, String responseFormat) {
+<span class="fc" id="L208">        String detail = completed.stderr().strip();</span>
+<span class="pc bpc" id="L209" title="1 of 2 branches missed.">        if (detail.isEmpty()) {</span>
+<span class="nc" id="L210">            detail = completed.stdout().strip();</span>
+        }
+<span class="pc bpc" id="L212" title="1 of 2 branches missed.">        if (!completed.stdout().strip().isEmpty()) {</span>
+            try {
+<span class="nc" id="L214">                String parsedText = ResponseParser.parseResponse(completed.stdout(), responseFormat).text();</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">                if (!parsedText.isEmpty()) {</span>
+<span class="nc" id="L216">                    detail = parsedText;</span>
+                }
+<span class="nc" id="L218">            } catch (PyValueError ignored) {</span>
+                // Matches Python's `except (ValueError, json.JSONDecodeError)`: an unparseable body
+                // simply leaves the raw stderr/stdout detail in place.
+<span class="nc" id="L221">            }</span>
+        }
+<span class="fc" id="L223">        return detail;</span>
+    }
+
+    private static void sleepSeconds(long seconds) {
+        try {
+<span class="fc" id="L228">            Thread.sleep(seconds * 1000L);</span>
+<span class="nc" id="L229">        } catch (InterruptedException exc) {</span>
+<span class="nc" id="L230">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L231">            throw new PyRuntimeError(&quot;Interrupted while backing off between runner attempts&quot;, exc);</span>
+<span class="fc" id="L232">        }</span>
+<span class="fc" id="L233">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

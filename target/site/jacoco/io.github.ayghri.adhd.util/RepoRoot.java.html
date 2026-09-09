@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RepoRoot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">RepoRoot.java</span></div><h1>RepoRoot.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+/**
+ * Resolves the repository root.
+ *
+ * &lt;p&gt;The Python scripts used {@code Path(__file__).resolve().parents[1]}, which has no faithful Java
+ * equivalent: once the tooling is packaged as a jar there is no source file to anchor on. The
+ * replacement is an explicit precedence chain, with a marker-file walk as the default so ordinary
+ * invocations from anywhere inside the checkout keep working.
+ */
+public final class RepoRoot {
+
+    public static final String PROPERTY = &quot;adhd.root&quot;;
+    public static final String ENV_VAR = &quot;ADHD_REPO_ROOT&quot;;
+
+    /** Files that together identify the checkout unambiguously. */
+<span class="fc" id="L21">    private static final String[] MARKERS = {&quot;evals/cases.jsonl&quot;, &quot;skills/i-have-adhd/SKILL.md&quot;};</span>
+
+    private RepoRoot() {}
+
+    public static Path resolve() {
+<span class="fc" id="L26">        String property = System.getProperty(PROPERTY);</span>
+<span class="pc bpc" id="L27" title="1 of 4 branches missed.">        if (property != null &amp;&amp; !property.isBlank()) {</span>
+<span class="fc" id="L28">            return verified(Paths.get(property).toAbsolutePath().normalize(), &quot;system property &quot; + PROPERTY);</span>
+        }
+
+<span class="fc" id="L31">        String env = System.getenv(ENV_VAR);</span>
+<span class="pc bpc" id="L32" title="3 of 4 branches missed.">        if (env != null &amp;&amp; !env.isBlank()) {</span>
+<span class="nc" id="L33">            return verified(Paths.get(env).toAbsolutePath().normalize(), &quot;environment variable &quot; + ENV_VAR);</span>
+        }
+
+<span class="fc" id="L36">        Path current = Paths.get(&quot;&quot;).toAbsolutePath().normalize();</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        for (Path candidate = current; candidate != null; candidate = candidate.getParent()) {</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">            if (looksLikeRoot(candidate)) {</span>
+<span class="fc" id="L39">                return candidate;</span>
+            }
+        }
+
+<span class="nc" id="L43">        throw new PyRuntimeError(</span>
+                &quot;Unable to locate the i-have-adhd repository root. Searched upward from &quot;
+                        + current
+                        + &quot; for a directory containing &quot;
+<span class="nc" id="L47">                        + String.join(&quot; and &quot;, MARKERS)</span>
+                        + &quot;. Set -D&quot;
+                        + PROPERTY
+                        + &quot;=&lt;path&gt; or the &quot;
+                        + ENV_VAR
+                        + &quot; environment variable.&quot;);
+    }
+
+    private static Path verified(Path candidate, String source) {
+<span class="fc bfc" id="L56" title="All 2 branches covered.">        if (!looksLikeRoot(candidate)) {</span>
+<span class="fc" id="L57">            throw new PyRuntimeError(</span>
+                    &quot;The &quot; + source + &quot; points at &quot; + candidate + &quot;, which is not an i-have-adhd checkout.&quot;);
+        }
+<span class="fc" id="L60">        return candidate;</span>
+    }
+
+    private static boolean looksLikeRoot(Path candidate) {
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        for (String marker : MARKERS) {</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">            if (!Files.isRegularFile(candidate.resolve(marker))) {</span>
+<span class="fc" id="L66">                return false;</span>
+            }
+        }
+<span class="fc" id="L69">        return true;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

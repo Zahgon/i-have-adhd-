@@ -1,0 +1,9 @@
+io/github/ayghri/adhd/evals/CliSurfaceTest.class
+io/github/ayghri/adhd/evals/CliSurfaceTest$Invocation.class
+io/github/ayghri/adhd/pi/PiExtensionCheckTest.class
+io/github/ayghri/adhd/hooks/AlwaysOnHookTest.class
+io/github/ayghri/adhd/util/PythonRuntimeCompatTest.class
+io/github/ayghri/adhd/pi/OmpPackageTest.class
+io/github/ayghri/adhd/evals/EvaluationHarnessTest.class
+io/github/ayghri/adhd/hooks/OpenCodePluginTest.class
+io/github/ayghri/adhd/hooks/AlwaysOnHookTest$Runtime.class

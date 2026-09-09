@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PythonFloat.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">PythonFloat.java</span></div><h1>PythonFloat.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+/**
+ * Reproduces CPython's {@code repr(float)} formatting.
+ *
+ * &lt;p&gt;Java's {@link Double#toString} and Python's {@code repr} both emit the shortest decimal string
+ * that round-trips (Java has done so since JDK 19, which implements Raffaello Giulietti's algorithm),
+ * but they disagree on how that digit string is laid out:
+ *
+ * &lt;pre&gt;
+ *   value      Python repr      Double.toString
+ *   1e-5       1e-05            1.0E-5
+ *   1e16       1e+16            1.0E16
+ *   1e15       1000000000000000.0
+ *                               1.0E15
+ *   0.0001     0.0001           1.0E-4
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;The strategy is therefore to take Java's (correct) shortest digits, decompose them into a
+ * {@code (digits, decpt)} pair where {@code value == 0.&lt;digits&gt; * 10^decpt}, and re-render using
+ * CPython's {@code format_float_short} rules for {@code 'r'} mode: use exponential notation when
+ * {@code decpt &lt;= -4 || decpt &gt; 16}, otherwise fixed notation, always keeping a {@code .0} suffix on
+ * integral values.
+ */
+public final class PythonFloat {
+
+    private PythonFloat() {}
+
+    /** Python's {@code repr()} of a float. */
+    public static String repr(double value) {
+<span class="fc bfc" id="L31" title="All 2 branches covered.">        if (Double.isNaN(value)) {</span>
+<span class="fc" id="L32">            return &quot;nan&quot;;</span>
+        }
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        if (Double.isInfinite(value)) {</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">            return value &gt; 0 ? &quot;inf&quot; : &quot;-inf&quot;;</span>
+        }
+
+<span class="fc" id="L38">        String sign = &quot;&quot;;</span>
+<span class="fc" id="L39">        double magnitude = value;</span>
+        // Copysign catches -0.0, whose repr is &quot;-0.0&quot; in Python.
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">        if (Math.copySign(1.0, value) &lt; 0) {</span>
+<span class="nc" id="L42">            sign = &quot;-&quot;;</span>
+<span class="nc" id="L43">            magnitude = -value;</span>
+        }
+
+<span class="fc" id="L46">        Decomposed d = decompose(magnitude);</span>
+<span class="fc" id="L47">        return sign + render(d.digits, d.decpt);</span>
+    }
+
+    /**
+     * How {@code json.dumps} writes a float. Python's JSON encoder uses {@code float.__repr__} for
+     * finite values but spells the non-finite ones {@code NaN}/{@code Infinity}/{@code -Infinity}
+     * (allow_nan defaults to true), which is not what {@code repr} produces.
+     */
+    public static String jsonRepr(double value) {
+<span class="fc bfc" id="L56" title="All 2 branches covered.">        if (Double.isNaN(value)) {</span>
+<span class="fc" id="L57">            return &quot;NaN&quot;;</span>
+        }
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (Double.isInfinite(value)) {</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">            return value &gt; 0 ? &quot;Infinity&quot; : &quot;-Infinity&quot;;</span>
+        }
+<span class="fc" id="L62">        return repr(value);</span>
+    }
+
+    /**
+     * Python's {@code format(value, '.&lt;digits&gt;f')}.
+     *
+     * &lt;p&gt;Not interchangeable with {@code String.format(&quot;%.4f&quot;, ...)}: Java's Formatter rounds
+     * HALF_UP while Python rounds HALF_EVEN, so a double that is exactly representable at the
+     * rounding digit diverges. {@code 0.15625} is a reachable example, formatting as {@code 0.1562}
+     * in Python and {@code 0.1563} in Java. Constructing the BigDecimal from the double gives the
+     * exact binary value, which is the same thing Python rounds.
+     */
+    public static String formatFixed(double value, int digits) {
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">        if (Double.isNaN(value)) {</span>
+<span class="nc" id="L76">            return &quot;nan&quot;;</span>
+        }
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">        if (Double.isInfinite(value)) {</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">            return value &gt; 0 ? &quot;inf&quot; : &quot;-inf&quot;;</span>
+        }
+<span class="fc" id="L81">        return new java.math.BigDecimal(value)</span>
+<span class="fc" id="L82">                .setScale(digits, java.math.RoundingMode.HALF_EVEN)</span>
+<span class="fc" id="L83">                .toPlainString();</span>
+    }
+
+<span class="fc" id="L86">    private record Decomposed(String digits, int decpt) {}</span>
+
+    /**
+     * Splits a non-negative finite double into significant digits (no leading or trailing zeros) and
+     * a decimal exponent such that {@code value == 0.&lt;digits&gt; * 10^decpt}.
+     */
+    private static Decomposed decompose(double magnitude) {
+<span class="fc" id="L93">        String java = Double.toString(magnitude);</span>
+
+        String mantissa;
+        int exponent;
+<span class="fc" id="L97">        int e = java.indexOf('E');</span>
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        if (e &gt;= 0) {</span>
+<span class="nc" id="L99">            mantissa = java.substring(0, e);</span>
+<span class="nc" id="L100">            exponent = Integer.parseInt(java.substring(e + 1));</span>
+        } else {
+<span class="fc" id="L102">            mantissa = java;</span>
+<span class="fc" id="L103">            exponent = 0;</span>
+        }
+
+<span class="fc" id="L106">        int dot = mantissa.indexOf('.');</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">        String intPart = dot &lt; 0 ? mantissa : mantissa.substring(0, dot);</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        String fracPart = dot &lt; 0 ? &quot;&quot; : mantissa.substring(dot + 1);</span>
+
+<span class="fc" id="L110">        String raw = intPart + fracPart;</span>
+        // decpt counts digits to the left of the decimal point, then shifts by the exponent.
+<span class="fc" id="L112">        int decpt = intPart.length() + exponent;</span>
+
+<span class="fc" id="L114">        int firstSignificant = 0;</span>
+<span class="pc bpc" id="L115" title="1 of 4 branches missed.">        while (firstSignificant &lt; raw.length() &amp;&amp; raw.charAt(firstSignificant) == '0') {</span>
+<span class="fc" id="L116">            firstSignificant++;</span>
+<span class="fc" id="L117">            decpt--;</span>
+        }
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">        if (firstSignificant == raw.length()) {</span>
+            // The value is zero; Python renders it as &quot;0.0&quot;.
+<span class="nc" id="L121">            return new Decomposed(&quot;0&quot;, 1);</span>
+        }
+
+<span class="fc" id="L124">        int lastSignificant = raw.length();</span>
+<span class="pc bpc" id="L125" title="1 of 4 branches missed.">        while (lastSignificant &gt; firstSignificant &amp;&amp; raw.charAt(lastSignificant - 1) == '0') {</span>
+<span class="fc" id="L126">            lastSignificant--;</span>
+        }
+
+<span class="fc" id="L129">        return new Decomposed(raw.substring(firstSignificant, lastSignificant), decpt);</span>
+    }
+
+    private static String render(String digits, int decpt) {
+        // CPython format_float_short, 'r' mode: exponential when decpt &lt;= -4 or decpt &gt; 16.
+<span class="pc bpc" id="L134" title="2 of 4 branches missed.">        if (decpt &lt;= -4 || decpt &gt; 16) {</span>
+<span class="nc" id="L135">            StringBuilder sb = new StringBuilder();</span>
+<span class="nc" id="L136">            sb.append(digits.charAt(0));</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">            if (digits.length() &gt; 1) {</span>
+<span class="nc" id="L138">                sb.append('.').append(digits, 1, digits.length());</span>
+            }
+<span class="nc" id="L140">            int exp = decpt - 1;</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">            sb.append('e').append(exp &lt; 0 ? '-' : '+');</span>
+<span class="nc" id="L142">            String magnitude = Integer.toString(Math.abs(exp));</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">            if (magnitude.length() &lt; 2) {</span>
+<span class="nc" id="L144">                sb.append('0');</span>
+            }
+<span class="nc" id="L146">            sb.append(magnitude);</span>
+<span class="nc" id="L147">            return sb.toString();</span>
+        }
+
+<span class="fc bfc" id="L150" title="All 2 branches covered.">        if (decpt &lt;= 0) {</span>
+<span class="fc" id="L151">            return &quot;0.&quot; + &quot;0&quot;.repeat(-decpt) + digits;</span>
+        }
+<span class="fc bfc" id="L153" title="All 2 branches covered.">        if (decpt &gt;= digits.length()) {</span>
+<span class="fc" id="L154">            return digits + &quot;0&quot;.repeat(decpt - digits.length()) + &quot;.0&quot;;</span>
+        }
+<span class="fc" id="L156">        return digits.substring(0, decpt) + &quot;.&quot; + digits.substring(decpt);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

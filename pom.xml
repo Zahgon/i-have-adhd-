@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.ayghri</groupId>
+  <artifactId>i-have-adhd-tools</artifactId>
+  <version>0.2.0</version>
+  <packaging>jar</packaging>
+
+  <name>i-have-adhd tools</name>
+  <description>Java port of the i-have-adhd evaluation harness and Pi/OMP extension smoke test.</description>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <jackson.version>2.17.2</jackson.version>
+    <junit.version>5.11.4</junit.version>
+    <!--
+      Default so surefire's late-evaluated @{argLine} always resolves. A
+      coverage agent (jacoco prepare-agent) overwrites this property with its
+      -javaagent flag; without the default, running tests without that agent
+      would fail to interpolate.
+    -->
+    <argLine></argLine>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>i-have-adhd-tools</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <encoding>UTF-8</encoding>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <!--
+            The harness compares byte-exact stdout against a Python reference.
+            file.encoding pins UTF-8 I/O; the locale properties keep
+            String.format("%.4f", ...) on a dot decimal separator even when the
+            developer machine is set to a comma-decimal locale.
+
+            @{argLine} is late-evaluated and forwards whatever a coverage agent
+            put on the argLine property. Hardcoding the flags without it silently
+            dropped jacoco's -javaagent, so no execution data was ever written.
+          -->
+          <argLine>@{argLine} -Dfile.encoding=UTF-8 -Duser.language=en -Duser.country=US</argLine>
+          <trimStackTrace>false</trimStackTrace>
+          <!--
+            Dummy credentials. build_isolated_env strips *_API_KEY and the two
+            token names that do not follow that convention; without a secret in
+            the forked JVM's environment the strip has nothing to act on and the
+            test would pass on an empty set.
+          -->
+          <environmentVariables>
+            <ADHD_STUB_API_KEY>not-a-real-key</ADHD_STUB_API_KEY>
+            <ANTHROPIC_AUTH_TOKEN>not-a-real-token</ANTHROPIC_AUTH_TOKEN>
+            <OPENAI_ACCESS_TOKEN>not-a-real-token</OPENAI_ACCESS_TOKEN>
+          </environmentVariables>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.3</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

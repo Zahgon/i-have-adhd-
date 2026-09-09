@@ -96,19 +96,13 @@ A `SessionStart` hook loads the full ruleset at the start of every session, no `
 touch ~/.claude/.i-have-adhd-always
 ```
 
-If you use a custom Claude configuration directory, create the flag there instead:
-
-```bash
-touch "$CLAUDE_CONFIG_DIR/.i-have-adhd-always"
-```
-
 Back to on-demand:
 
 ```bash
 rm ~/.claude/.i-have-adhd-always
 ```
 
-The hook only fires when the flag file exists, so installing the plugin changes nothing by itself. "stop adhd mode" still turns it off for the current session.
+The hook only fires when the flag file exists, so installing the plugin changes nothing by itself. Honors `$CLAUDE_CONFIG_DIR` if you've moved your config dir. "stop adhd mode" still turns it off for the current session.
 
 </details>
 
@@ -518,22 +512,6 @@ Back to on-demand:
 ```bash
 rm ~/.pi/agent/.i-have-adhd-always
 ```
-
-### Config file (optional)
-
-Create `~/.pi/agent/i-have-adhd.json` in Pi's agent configuration directory:
-
-```json
-{
-  "alwaysOn": true,
-  "hideStatus": true
-}
-```
-
-- `alwaysOn`: start every session with the rules active — same as the `.i-have-adhd-always` flag file, which still works
-- `hideStatus`: keep the `● ADHD ON` status-bar entry hidden; the rules and the `/i-have-adhd` command still work
-
-Read once at extension startup, so restart Pi after changing it. A saved choice for the current session wins over `alwaysOn`, so `stop adhd mode` keeps that session disabled.
 
 If `PI_CODING_AGENT_DIR` is set, put `.i-have-adhd-always` in that directory instead. Run `/reload` or start a new session after changing the flag.
 

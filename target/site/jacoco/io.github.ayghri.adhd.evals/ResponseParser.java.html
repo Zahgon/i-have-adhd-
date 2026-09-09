@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ResponseParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">ResponseParser.java</span></div><h1>ResponseParser.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.github.ayghri.adhd.util.JsonLines;
+import io.github.ayghri.adhd.util.PythonJson;
+import io.github.ayghri.adhd.util.PyValueError;
+import io.github.ayghri.adhd.util.PythonValue;
+
+/** Port of {@code _parse_response}. */
+public final class ResponseParser {
+
+    /**
+     * {@code cost} stays a node rather than a {@code Double} so the written row can distinguish a
+     * missing cost from an explicit {@code null} exactly as the source does.
+     */
+<span class="fc" id="L16">    public record ParsedResponse(String text, JsonNode usage, JsonNode cost) {</span>
+
+        public boolean hasCost() {
+<span class="pc bpc" id="L19" title="1 of 4 branches missed.">            return cost != null &amp;&amp; !cost.isNull();</span>
+        }
+
+        /** Python's {@code float(cost or 0)}. */
+        public double costOrZero() {
+<span class="fc bfc" id="L24" title="All 2 branches covered.">            return PythonValue.isTruthy(cost) ? cost.doubleValue() : 0.0;</span>
+        }
+    }
+
+    private ResponseParser() {}
+
+    public static ParsedResponse parseResponse(String output, String responseFormat) {
+<span class="pc bpc" id="L31" title="1 of 4 branches missed.">        switch (responseFormat) {</span>
+            case &quot;text&quot; -&gt; {
+<span class="fc" id="L33">                return new ParsedResponse(output.strip(), PythonJson.MAPPER.createObjectNode(), null);</span>
+            }
+            case &quot;claude-json&quot; -&gt; {
+<span class="fc" id="L36">                JsonNode payload = JsonLines.loads(output);</span>
+<span class="fc" id="L37">                JsonNode usage = payload.get(&quot;usage&quot;);</span>
+<span class="fc" id="L38">                return new ParsedResponse(</span>
+<span class="fc" id="L39">                        PythonValue.str(payload.get(&quot;result&quot;)).strip(),</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">                        PythonValue.isTruthy(usage) ? usage : PythonJson.MAPPER.createObjectNode(),</span>
+<span class="fc" id="L41">                        payload.get(&quot;total_cost_usd&quot;));</span>
+            }
+            case &quot;codex-jsonl&quot; -&gt; {
+<span class="fc" id="L44">                JsonNode text = null;</span>
+<span class="fc" id="L45">                JsonNode usage = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">                for (String line : JsonLines.splitLines(output)) {</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">                    if (line.isBlank()) {</span>
+<span class="fc" id="L48">                        continue;</span>
+                    }
+<span class="fc" id="L50">                    JsonNode event = JsonLines.loads(line);</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">                    JsonNode item = event.has(&quot;item&quot;) ? event.get(&quot;item&quot;) : PythonJson.MAPPER.createObjectNode();</span>
+<span class="pc bpc" id="L52" title="1 of 6 branches missed.">                    if (isType(event, &quot;item.completed&quot;) &amp;&amp; isType(item, &quot;agent_message&quot;) &amp;&amp; item.has(&quot;text&quot;)) {</span>
+<span class="fc" id="L53">                        text = item.get(&quot;text&quot;);</span>
+                    }
+<span class="pc bpc" id="L55" title="1 of 4 branches missed.">                    if (isType(event, &quot;turn.completed&quot;) &amp;&amp; event.has(&quot;usage&quot;)) {</span>
+<span class="fc" id="L56">                        usage = event.get(&quot;usage&quot;);</span>
+                    }
+<span class="fc" id="L58">                }</span>
+<span class="fc" id="L59">                return new ParsedResponse(</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">                        (text == null ? &quot;&quot; : PythonValue.str(text)).strip(), usage, null);</span>
+            }
+<span class="nc" id="L62">            default -&gt; throw new PyValueError(&quot;Unsupported response format: &quot; + responseFormat);</span>
+        }
+    }
+
+    private static boolean isType(JsonNode node, String expected) {
+<span class="fc" id="L67">        JsonNode type = node.get(&quot;type&quot;);</span>
+<span class="pc bpc" id="L68" title="2 of 6 branches missed.">        return type != null &amp;&amp; type.isTextual() &amp;&amp; type.textValue().equals(expected);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

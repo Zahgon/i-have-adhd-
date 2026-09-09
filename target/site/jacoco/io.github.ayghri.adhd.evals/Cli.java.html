@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Cli.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">Cli.java</span></div><h1>Cli.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * A hand-rolled parser covering the slice of {@code argparse} the source uses.
+ *
+ * &lt;p&gt;Written by hand rather than delegating to a CLI library because the migration is graded on
+ * byte-exact stderr: argparse's {@code error:} wording, its habit of reporting every missing
+ * required argument in one message, and its exit code 2 are all observable behaviour.
+ */
+final class Cli {
+
+    private final List&lt;String&gt; tokens;
+<span class="fc" id="L19">    private final List&lt;String&gt; missingRequired = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L20">    private String command = &quot;&quot;;</span>
+
+<span class="fc" id="L22">    Cli(String[] argv) {</span>
+<span class="fc" id="L23">        this.tokens = new ArrayList&lt;&gt;(List.of(argv));</span>
+<span class="fc" id="L24">    }</span>
+
+    static final class UsageError extends RuntimeException {
+        private final String usage;
+        private final String prog;
+
+        UsageError(String usage, String prog, String message) {
+<span class="fc" id="L31">            super(message);</span>
+<span class="fc" id="L32">            this.usage = usage;</span>
+<span class="fc" id="L33">            this.prog = prog;</span>
+<span class="fc" id="L34">        }</span>
+
+        String usage() {
+<span class="fc" id="L37">            return usage;</span>
+        }
+
+        String prog() {
+<span class="fc" id="L41">            return prog;</span>
+        }
+    }
+
+    static final class HelpRequested extends RuntimeException {
+        private final String help;
+
+<span class="fc" id="L48">        HelpRequested(String help) {</span>
+<span class="fc" id="L49">            this.help = help;</span>
+<span class="fc" id="L50">        }</span>
+
+        String help() {
+<span class="fc" id="L53">            return help;</span>
+        }
+    }
+
+    boolean wantsTopLevelHelp() {
+<span class="fc bfc" id="L58" title="All 6 branches covered.">        return !tokens.isEmpty() &amp;&amp; (tokens.get(0).equals(&quot;-h&quot;) || tokens.get(0).equals(&quot;--help&quot;));</span>
+    }
+
+    String nextCommand(List&lt;String&gt; choices) {
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (tokens.isEmpty()) {</span>
+<span class="fc" id="L63">            throw new UsageError(topLevelUsage(), RunEvals.PROG, &quot;the following arguments are required: command&quot;);</span>
+        }
+        // argparse never lets an option-looking token satisfy a positional, so `--zzz` alone
+        // reports the missing subcommand rather than an invalid choice.
+<span class="fc" id="L67">        int at = 0;</span>
+<span class="pc bpc" id="L68" title="1 of 6 branches missed.">        while (at &lt; tokens.size() &amp;&amp; tokens.get(at).startsWith(&quot;-&quot;) &amp;&amp; tokens.get(at).length() &gt; 1) {</span>
+<span class="fc" id="L69">            at++;</span>
+        }
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        if (at == tokens.size()) {</span>
+<span class="fc" id="L72">            throw new UsageError(topLevelUsage(), RunEvals.PROG, &quot;the following arguments are required: command&quot;);</span>
+        }
+<span class="fc" id="L74">        String candidate = tokens.remove(at);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (!choices.contains(candidate)) {</span>
+<span class="fc" id="L76">            throw new UsageError(topLevelUsage(), RunEvals.PROG,</span>
+<span class="fc" id="L77">                    &quot;argument command: invalid choice: &quot; + quoted(candidate) + &quot; (choose from &quot; + choiceList(choices) + &quot;)&quot;);</span>
+        }
+<span class="fc" id="L79">        command = candidate;</span>
+<span class="fc bfc" id="L80" title="All 4 branches covered.">        if (tokens.remove(&quot;-h&quot;) || tokens.remove(&quot;--help&quot;)) {</span>
+<span class="fc" id="L81">            throw new HelpRequested(subcommandHelp(command));</span>
+        }
+<span class="fc" id="L83">        return command;</span>
+    }
+
+    /**
+     * argparse defaults to {@code allow_abbrev=True}, so any unambiguous prefix of a long option is
+     * accepted. {@code optionNames} must stay in declaration order: the ambiguity message lists
+     * candidates in the order the parser registered them, not alphabetically.
+     */
+    void allowAbbrev(List&lt;String&gt; optionNames) {
+<span class="fc" id="L92">        List&lt;String&gt; candidates = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L93">        candidates.add(&quot;--help&quot;);</span>
+<span class="fc" id="L94">        candidates.addAll(optionNames);</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        for (int i = 0; i &lt; tokens.size(); i++) {</span>
+<span class="fc" id="L96">            String token = tokens.get(i);</span>
+<span class="pc bpc" id="L97" title="1 of 4 branches missed.">            if (!token.startsWith(&quot;--&quot;) || token.equals(&quot;--&quot;)) {</span>
+<span class="nc" id="L98">                continue;</span>
+            }
+<span class="fc" id="L100">            int equals = token.indexOf('=');</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">            String name = equals &lt; 0 ? token : token.substring(0, equals);</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">            if (candidates.contains(name)) {</span>
+<span class="fc" id="L103">                continue;</span>
+            }
+<span class="fc" id="L105">            List&lt;String&gt; matches = candidates.stream().filter(option -&gt; option.startsWith(name)).toList();</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">            if (matches.size() &gt; 1) {</span>
+<span class="fc" id="L107">                throw new UsageError(usage(), prog(),</span>
+<span class="fc" id="L108">                        &quot;ambiguous option: &quot; + name + &quot; could match &quot; + String.join(&quot;, &quot;, matches));</span>
+            }
+<span class="pc bpc" id="L110" title="1 of 2 branches missed.">            if (matches.size() == 1) {</span>
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">                tokens.set(i, equals &lt; 0 ? matches.get(0) : matches.get(0) + token.substring(equals));</span>
+            }
+        }
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">        if (tokens.remove(&quot;--help&quot;)) {</span>
+<span class="nc" id="L115">            throw new HelpRequested(subcommandHelp(command));</span>
+        }
+<span class="fc" id="L117">    }</span>
+
+    boolean flag(String name) {
+<span class="fc" id="L120">        boolean present = false;</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">        while (tokens.remove(name)) {</span>
+<span class="fc" id="L122">            present = true;</span>
+        }
+<span class="fc" id="L124">        return present;</span>
+    }
+
+    String optionalString(String name, String fallback) {
+<span class="fc" id="L128">        List&lt;String&gt; values = take(name);</span>
+<span class="fc bfc" id="L129" title="All 2 branches covered.">        return values.isEmpty() ? fallback : values.get(values.size() - 1);</span>
+    }
+
+    List&lt;String&gt; appendString(String name) {
+<span class="fc" id="L133">        List&lt;String&gt; values = take(name);</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        return values.isEmpty() ? null : values;</span>
+    }
+
+    String requiredString(String name) {
+<span class="fc" id="L138">        List&lt;String&gt; values = take(name);</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (values.isEmpty()) {</span>
+<span class="fc" id="L140">            missingRequired.add(name);</span>
+<span class="fc" id="L141">            return null;</span>
+        }
+<span class="fc" id="L143">        return values.get(values.size() - 1);</span>
+    }
+
+    String requiredChoice(String name, List&lt;String&gt; choices) {
+<span class="fc" id="L147">        String value = requiredString(name);</span>
+<span class="fc bfc" id="L148" title="All 4 branches covered.">        if (value != null &amp;&amp; !choices.contains(value)) {</span>
+<span class="fc" id="L149">            throw new UsageError(usage(), prog(), &quot;argument &quot; + name + &quot;: invalid choice: &quot; + quoted(value)</span>
+<span class="fc" id="L150">                    + &quot; (choose from &quot; + choiceList(choices) + &quot;)&quot;);</span>
+        }
+<span class="fc" id="L152">        return value;</span>
+    }
+
+    Path optionalPath(String name, Path fallback) {
+<span class="fc" id="L156">        String value = optionalString(name, null);</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        return value == null ? fallback : Paths.get(value);</span>
+    }
+
+    Path requiredPath(String name) {
+<span class="fc" id="L161">        String value = requiredString(name);</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        return value == null ? null : Paths.get(value);</span>
+    }
+
+    Path positionalPath(String metavar) {
+<span class="pc bfc" id="L166" title="All 2 branches covered.">        for (int i = 0; i &lt; tokens.size(); i++) {</span>
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">            if (!tokens.get(i).startsWith(&quot;-&quot;)) {</span>
+<span class="fc" id="L168">                return Paths.get(tokens.remove(i));</span>
+            }
+        }
+<span class="fc" id="L171">        missingRequired.add(metavar);</span>
+<span class="fc" id="L172">        return null;</span>
+    }
+
+    int optionalInt(String name, int fallback) {
+<span class="fc" id="L176">        String value = optionalString(name, null);</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">        if (value == null) {</span>
+<span class="fc" id="L178">            return fallback;</span>
+        }
+        try {
+<span class="fc" id="L181">            return Integer.parseInt(value);</span>
+<span class="fc" id="L182">        } catch (NumberFormatException exc) {</span>
+<span class="fc" id="L183">            throw new UsageError(usage(), prog(), &quot;argument &quot; + name + &quot;: invalid int value: &quot; + quoted(value));</span>
+        }
+    }
+
+    double optionalDouble(String name, double fallback) {
+<span class="fc" id="L188">        String value = optionalString(name, null);</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">        if (value == null) {</span>
+<span class="fc" id="L190">            return fallback;</span>
+        }
+        try {
+<span class="fc" id="L193">            return Double.parseDouble(value);</span>
+<span class="fc" id="L194">        } catch (NumberFormatException exc) {</span>
+<span class="fc" id="L195">            throw new UsageError(usage(), prog(), &quot;argument &quot; + name + &quot;: invalid float value: &quot; + quoted(value));</span>
+        }
+    }
+
+    void finish() {
+<span class="fc bfc" id="L200" title="All 2 branches covered.">        if (!missingRequired.isEmpty()) {</span>
+<span class="fc" id="L201">            throw new UsageError(usage(), prog(),</span>
+<span class="fc" id="L202">                    &quot;the following arguments are required: &quot; + String.join(&quot;, &quot;, missingRequired));</span>
+        }
+<span class="fc bfc" id="L204" title="All 2 branches covered.">        if (!tokens.isEmpty()) {</span>
+<span class="fc" id="L205">            throw new UsageError(topLevelUsage(), RunEvals.PROG,</span>
+<span class="fc" id="L206">                    &quot;unrecognized arguments: &quot; + String.join(&quot; &quot;, tokens));</span>
+        }
+<span class="fc" id="L208">    }</span>
+
+    UsageError usageError(String message) {
+<span class="fc" id="L211">        return new UsageError(usage(), prog(), message);</span>
+    }
+
+    /** Collects every occurrence of an option, accepting both {@code --opt value} and {@code --opt=value}. */
+    private List&lt;String&gt; take(String name) {
+<span class="fc" id="L216">        List&lt;String&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L217">        int i = 0;</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        while (i &lt; tokens.size()) {</span>
+<span class="fc" id="L219">            String token = tokens.get(i);</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">            if (token.equals(name)) {</span>
+<span class="fc" id="L221">                tokens.remove(i);</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">                if (i &gt;= tokens.size()) {</span>
+<span class="fc" id="L223">                    throw new UsageError(usage(), prog(), &quot;argument &quot; + name + &quot;: expected one argument&quot;);</span>
+                }
+<span class="fc" id="L225">                values.add(tokens.remove(i));</span>
+<span class="fc" id="L226">                continue;</span>
+            }
+<span class="fc bfc" id="L228" title="All 2 branches covered.">            if (token.startsWith(name + &quot;=&quot;)) {</span>
+<span class="fc" id="L229">                tokens.remove(i);</span>
+<span class="fc" id="L230">                values.add(token.substring(name.length() + 1));</span>
+<span class="fc" id="L231">                continue;</span>
+            }
+<span class="fc" id="L233">            i++;</span>
+<span class="fc" id="L234">        }</span>
+<span class="fc" id="L235">        return values;</span>
+    }
+
+    private static String quoted(String value) {
+<span class="fc" id="L239">        return &quot;'&quot; + value + &quot;'&quot;;</span>
+    }
+
+    private static String choiceList(List&lt;String&gt; choices) {
+<span class="fc" id="L243">        return choices.stream().map(Cli::quoted).collect(Collectors.joining(&quot;, &quot;));</span>
+    }
+
+    private String prog() {
+<span class="pc bpc" id="L247" title="1 of 2 branches missed.">        return command.isEmpty() ? RunEvals.PROG : RunEvals.PROG + &quot; &quot; + command;</span>
+    }
+
+    private String usage() {
+<span class="pc bpc" id="L251" title="1 of 2 branches missed.">        return command.isEmpty() ? topLevelUsage() : subcommandUsage(command);</span>
+    }
+
+    static String topLevelUsage() {
+<span class="fc" id="L255">        return &quot;usage: &quot; + RunEvals.PROG + &quot; [-h] {validate,plan,score,run} ...&quot;;</span>
+    }
+
+    /**
+     * argparse wraps usage lines at the terminal width, falling back to 80 columns when stdout is
+     * not a tty. Reproducing the wrapped form verbatim keeps the usage block that precedes every
+     * error message byte-identical to the Python CLI.
+     */
+    private static String subcommandUsage(String command) {
+<span class="pc bpc" id="L264" title="1 of 5 branches missed.">        return switch (command) {</span>
+<span class="fc" id="L265">            case &quot;validate&quot; -&gt; &quot;usage: %s validate [-h] [--cases CASES]&quot;.formatted(RunEvals.PROG);</span>
+<span class="fc" id="L266">            case &quot;plan&quot; -&gt; &quot;&quot;&quot;</span>
+                    usage: %s plan [-h] [--cases CASES] [--trials TRIALS]
+                                             [--include-comparator]&quot;&quot;&quot;
+<span class="fc" id="L269">                    .formatted(RunEvals.PROG);</span>
+<span class="fc" id="L270">            case &quot;score&quot; -&gt; &quot;usage: %s score [-h] scores&quot;.formatted(RunEvals.PROG);</span>
+<span class="fc" id="L271">            case &quot;run&quot; -&gt; &quot;&quot;&quot;</span>
+                    usage: %s run [-h] [--cases CASES] [--runner-config RUNNER_CONFIG]
+                                            --runner RUNNER
+                                            --condition {baseline,candidate,comparator}
+                                            [--condition-skill CONDITION_SKILL] [--case CASE]
+                                            [--trials TRIALS] [--retries RETRIES]
+                                            [--budget-usd BUDGET_USD] [--allow-unmetered]
+                                            --output OUTPUT&quot;&quot;&quot;
+<span class="fc" id="L279">                    .formatted(RunEvals.PROG);</span>
+<span class="nc" id="L280">            default -&gt; &quot;usage: %s %s [-h]&quot;.formatted(RunEvals.PROG, command);</span>
+        };
+    }
+
+    static String topLevelHelp() {
+<span class="fc" id="L285">        return topLevelUsage() + &quot;&quot;&quot;</span>
+
+
+                Validate, run, and score paired response-quality evaluations.
+
+                positional arguments:
+                  {validate,plan,score,run}
+                    validate            Validate the case catalog
+                    plan                Print the paired run matrix as JSONL
+                    score               Aggregate manually judged score rows
+                    run                 Run one evaluation condition
+
+                options:
+                  -h, --help            show this help message and exit
+                &quot;&quot;&quot;;
+    }
+
+    private static String subcommandHelp(String command) {
+<span class="pc bpc" id="L303" title="1 of 5 branches missed.">        return subcommandUsage(command) + &quot;\n\n&quot; + switch (command) {</span>
+<span class="fc" id="L304">            case &quot;validate&quot; -&gt; &quot;&quot;&quot;</span>
+                    options:
+                      -h, --help     show this help message and exit
+                      --cases CASES
+                    &quot;&quot;&quot;;
+<span class="fc" id="L309">            case &quot;plan&quot; -&gt; &quot;&quot;&quot;</span>
+                    options:
+                      -h, --help            show this help message and exit
+                      --cases CASES
+                      --trials TRIALS
+                      --include-comparator
+                    &quot;&quot;&quot;;
+<span class="fc" id="L316">            case &quot;score&quot; -&gt; &quot;&quot;&quot;</span>
+                    positional arguments:
+                      scores
+
+                    options:
+                      -h, --help  show this help message and exit
+                    &quot;&quot;&quot;;
+<span class="fc" id="L323">            case &quot;run&quot; -&gt; &quot;&quot;&quot;</span>
+                    options:
+                      -h, --help            show this help message and exit
+                      --cases CASES
+                      --runner-config RUNNER_CONFIG
+                      --runner RUNNER
+                      --condition {baseline,candidate,comparator}
+                      --condition-skill CONDITION_SKILL
+                      --case CASE
+                      --trials TRIALS
+                      --retries RETRIES
+                      --budget-usd BUDGET_USD
+                      --allow-unmetered
+                      --output OUTPUT
+                    &quot;&quot;&quot;;
+<span class="nc" id="L338">            default -&gt; &quot;options:\n  -h, --help  show this help message and exit\n&quot;;</span>
+        };
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

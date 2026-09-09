@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RowKey.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">RowKey.java</span></div><h1>RowKey.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.github.ayghri.adhd.util.PythonStr;
+import io.github.ayghri.adhd.util.PythonValue;
+
+import java.util.Comparator;
+import java.util.Objects;
+
+/**
+ * The {@code (case_id, trial)} pair used as a Counter key in {@code _check_pairing}.
+ *
+ * &lt;p&gt;{@code trial} is required but never type-checked by {@code _validate_score}, so it is kept as a
+ * raw node. Equality follows Python's numeric tower, where {@code 1}, {@code 1.0} and {@code True}
+ * all hash and compare equal, hence the canonical form rather than direct node equality.
+ */
+<span class="fc" id="L17">public record RowKey(String caseId, String canonicalTrial, JsonNode trialNode) {</span>
+
+    public static RowKey of(JsonNode row) {
+<span class="fc" id="L20">        JsonNode trial = row.get(&quot;trial&quot;);</span>
+<span class="fc" id="L21">        return new RowKey(PythonValue.str(row.get(&quot;case_id&quot;)), canonicalize(trial), trial);</span>
+    }
+
+    private static String canonicalize(JsonNode trial) {
+<span class="fc bfc" id="L25" title="All 2 branches covered.">        if (PythonValue.isPythonNumber(trial)) {</span>
+<span class="fc" id="L26">            return &quot;n:&quot; + PythonValue.numericValue(trial);</span>
+        }
+<span class="fc" id="L28">        return &quot;s:&quot; + PythonValue.str(trial);</span>
+    }
+
+    public String describe() {
+<span class="fc" id="L32">        return caseId + &quot;/trial &quot; + PythonValue.str(trialNode);</span>
+    }
+
+    /**
+     * Python sorts these tuples element-wise. Numeric trials compare numerically; anything else
+     * falls back to text so that a malformed catalog still produces a deterministic message instead
+     * of the TypeError Python would raise on mixed types.
+     */
+<span class="fc" id="L40">    private static final Comparator&lt;RowKey&gt; BY_TRIAL = (a, b) -&gt; {</span>
+<span class="fc" id="L41">        boolean an = PythonValue.isPythonNumber(a.trialNode());</span>
+<span class="fc" id="L42">        boolean bn = PythonValue.isPythonNumber(b.trialNode());</span>
+<span class="pc bpc" id="L43" title="1 of 4 branches missed.">        if (an &amp;&amp; bn) {</span>
+<span class="fc" id="L44">            return Double.compare(</span>
+<span class="fc" id="L45">                    PythonValue.numericValue(a.trialNode()), PythonValue.numericValue(b.trialNode()));</span>
+        }
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (an != bn) {</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">            return an ? -1 : 1;</span>
+        }
+<span class="nc" id="L50">        return PythonStr.CODE_POINT_ORDER.compare(</span>
+<span class="nc" id="L51">                PythonValue.str(a.trialNode()), PythonValue.str(b.trialNode()));</span>
+    };
+
+<span class="fc" id="L54">    public static final Comparator&lt;RowKey&gt; ORDER =</span>
+<span class="fc" id="L55">            Comparator.&lt;RowKey, String&gt;comparing(RowKey::caseId, PythonStr.CODE_POINT_ORDER).thenComparing(BY_TRIAL);</span>
+
+    @Override
+    public boolean equals(Object other) {
+<span class="fc" id="L59">        return other instanceof RowKey key</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">                &amp;&amp; caseId.equals(key.caseId)</span>
+<span class="pc bpc" id="L61" title="2 of 4 branches missed.">                &amp;&amp; canonicalTrial.equals(key.canonicalTrial);</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="fc" id="L66">        return Objects.hash(caseId, canonicalTrial);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

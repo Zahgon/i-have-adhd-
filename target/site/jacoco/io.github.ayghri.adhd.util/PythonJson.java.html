@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PythonJson.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">PythonJson.java</span></div><h1>PythonJson.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.util.Iterator;
+import java.util.Map;
+
+/**
+ * A {@code json.dumps} work-alike.
+ *
+ * &lt;p&gt;Jackson's own writers cannot be configured into byte-parity with CPython: the default writer
+ * omits the space after {@code :} and {@code ,}, and {@code DefaultPrettyPrinter} indents arrays
+ * differently and puts a space inside empty containers. Since the migration is graded on byte-exact
+ * stdout, the encoder is reimplemented here against CPython's {@code json.encoder} rules.
+ *
+ * &lt;p&gt;Separator rules, straight from CPython: with no indent the separators are {@code (&quot;, &quot;, &quot;: &quot;)};
+ * with an indent they become {@code (&quot;,&quot;, &quot;: &quot;)} and each item goes on its own line. Empty
+ * containers always collapse to {@code {}} / {@code []}.
+ */
+public final class PythonJson {
+
+    /**
+     * Accepts exactly what {@code json.loads} accepts. Both flags are required for parity: Jackson
+     * otherwise ignores trailing content that Python rejects as {@code Extra data}, and rejects the
+     * bare {@code NaN}/{@code Infinity} tokens that Python accepts.
+     */
+<span class="fc" id="L33">    public static final ObjectMapper MAPPER = JsonMapper.builder()</span>
+<span class="fc" id="L34">            .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS)</span>
+<span class="fc" id="L35">            .build();</span>
+
+    private PythonJson() {}
+
+    /** {@code json.dumps(obj)} — compact, ensure_ascii=True. */
+    public static String dumps(JsonNode node) {
+<span class="fc" id="L41">        return dumps(node, true);</span>
+    }
+
+    /** {@code json.dumps(obj, ensure_ascii=&lt;ensureAscii&gt;)} — compact. */
+    public static String dumps(JsonNode node, boolean ensureAscii) {
+<span class="fc" id="L46">        StringBuilder sb = new StringBuilder();</span>
+<span class="fc" id="L47">        write(sb, node, ensureAscii, -1, 0);</span>
+<span class="fc" id="L48">        return sb.toString();</span>
+    }
+
+    /** {@code json.dumps(obj, indent=&lt;indent&gt;)} — ensure_ascii=True. */
+    public static String dumpsIndented(JsonNode node, int indent) {
+<span class="fc" id="L53">        StringBuilder sb = new StringBuilder();</span>
+<span class="fc" id="L54">        write(sb, node, true, indent, 0);</span>
+<span class="fc" id="L55">        return sb.toString();</span>
+    }
+
+    private static void write(StringBuilder sb, JsonNode node, boolean ensureAscii, int indent, int depth) {
+<span class="pc bpc" id="L59" title="1 of 4 branches missed.">        if (node == null || node.isNull()) {</span>
+<span class="fc" id="L60">            sb.append(&quot;null&quot;);</span>
+<span class="fc" id="L61">            return;</span>
+        }
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        if (node.isBoolean()) {</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">            sb.append(node.booleanValue() ? &quot;true&quot; : &quot;false&quot;);</span>
+<span class="fc" id="L65">            return;</span>
+        }
+<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (node.isTextual()) {</span>
+<span class="fc" id="L68">            escape(sb, node.textValue(), ensureAscii);</span>
+<span class="fc" id="L69">            return;</span>
+        }
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        if (node.isNumber()) {</span>
+<span class="fc" id="L72">            writeNumber(sb, node);</span>
+<span class="fc" id="L73">            return;</span>
+        }
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (node.isArray()) {</span>
+<span class="fc" id="L76">            writeArray(sb, (ArrayNode) node, ensureAscii, indent, depth);</span>
+<span class="fc" id="L77">            return;</span>
+        }
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">        if (node.isObject()) {</span>
+<span class="fc" id="L80">            writeObject(sb, (ObjectNode) node, ensureAscii, indent, depth);</span>
+<span class="fc" id="L81">            return;</span>
+        }
+<span class="nc" id="L83">        throw new IllegalArgumentException(&quot;Object of type &quot; + node.getNodeType() + &quot; is not JSON serializable&quot;);</span>
+    }
+
+    private static void writeNumber(StringBuilder sb, JsonNode node) {
+        // Python keeps ints and floats distinct all the way to the output, so an int stays &quot;1&quot; and a
+        // float stays &quot;1.0&quot;. Jackson preserves the same distinction when parsing, so dispatch on it.
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (node.isIntegralNumber()) {</span>
+<span class="fc" id="L90">            sb.append(node.bigIntegerValue().toString());</span>
+        } else {
+<span class="fc" id="L92">            sb.append(PythonFloat.jsonRepr(node.doubleValue()));</span>
+        }
+<span class="fc" id="L94">    }</span>
+
+    private static void writeArray(StringBuilder sb, ArrayNode array, boolean ensureAscii, int indent, int depth) {
+<span class="fc bfc" id="L97" title="All 2 branches covered.">        if (array.isEmpty()) {</span>
+<span class="fc" id="L98">            sb.append(&quot;[]&quot;);</span>
+<span class="fc" id="L99">            return;</span>
+        }
+<span class="fc bfc" id="L101" title="All 2 branches covered.">        boolean pretty = indent &gt;= 0;</span>
+<span class="fc" id="L102">        sb.append('[');</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        String childPad = pretty ? &quot;\n&quot; + &quot; &quot;.repeat(indent * (depth + 1)) : &quot;&quot;;</span>
+<span class="fc" id="L104">        boolean first = true;</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">        for (JsonNode child : array) {</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">            if (!first) {</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">                sb.append(pretty ? &quot;,&quot; : &quot;, &quot;);</span>
+            }
+<span class="fc" id="L109">            first = false;</span>
+<span class="fc" id="L110">            sb.append(childPad);</span>
+<span class="fc" id="L111">            write(sb, child, ensureAscii, indent, depth + 1);</span>
+<span class="fc" id="L112">        }</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        if (pretty) {</span>
+<span class="fc" id="L114">            sb.append('\n').append(&quot; &quot;.repeat(indent * depth));</span>
+        }
+<span class="fc" id="L116">        sb.append(']');</span>
+<span class="fc" id="L117">    }</span>
+
+    private static void writeObject(StringBuilder sb, ObjectNode object, boolean ensureAscii, int indent, int depth) {
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        if (object.isEmpty()) {</span>
+<span class="fc" id="L121">            sb.append(&quot;{}&quot;);</span>
+<span class="fc" id="L122">            return;</span>
+        }
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        boolean pretty = indent &gt;= 0;</span>
+<span class="fc" id="L125">        sb.append('{');</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        String childPad = pretty ? &quot;\n&quot; + &quot; &quot;.repeat(indent * (depth + 1)) : &quot;&quot;;</span>
+<span class="fc" id="L127">        boolean first = true;</span>
+        // Jackson's ObjectNode preserves insertion order, which is what Python dicts do.
+<span class="fc" id="L129">        Iterator&lt;Map.Entry&lt;String, JsonNode&gt;&gt; fields = object.fields();</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        while (fields.hasNext()) {</span>
+<span class="fc" id="L131">            Map.Entry&lt;String, JsonNode&gt; entry = fields.next();</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">            if (!first) {</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">                sb.append(pretty ? &quot;,&quot; : &quot;, &quot;);</span>
+            }
+<span class="fc" id="L135">            first = false;</span>
+<span class="fc" id="L136">            sb.append(childPad);</span>
+<span class="fc" id="L137">            escape(sb, entry.getKey(), ensureAscii);</span>
+<span class="fc" id="L138">            sb.append(&quot;: &quot;);</span>
+<span class="fc" id="L139">            write(sb, entry.getValue(), ensureAscii, indent, depth + 1);</span>
+<span class="fc" id="L140">        }</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        if (pretty) {</span>
+<span class="fc" id="L142">            sb.append('\n').append(&quot; &quot;.repeat(indent * depth));</span>
+        }
+<span class="fc" id="L144">        sb.append('}');</span>
+<span class="fc" id="L145">    }</span>
+
+    /**
+     * CPython's {@code encode_basestring} / {@code encode_basestring_ascii}.
+     *
+     * &lt;p&gt;Both always escape the quote, the backslash and everything below {@code 0x20}. The ascii
+     * variant additionally escapes everything outside the printable range {@code 0x20..0x7e}, so
+     * {@code DEL} is escaped too. Note that {@code /} is never escaped.
+     */
+    static void escape(StringBuilder sb, String value, boolean ensureAscii) {
+<span class="fc" id="L155">        sb.append('&quot;');</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        for (int i = 0; i &lt; value.length(); i++) {</span>
+<span class="fc" id="L157">            char c = value.charAt(i);</span>
+<span class="pc bpc" id="L158" title="5 of 8 branches missed.">            switch (c) {</span>
+<span class="fc" id="L159">                case '&quot;' -&gt; sb.append(&quot;\\\&quot;&quot;);</span>
+<span class="fc" id="L160">                case '\\' -&gt; sb.append(&quot;\\\\&quot;);</span>
+<span class="nc" id="L161">                case '\b' -&gt; sb.append(&quot;\\b&quot;);</span>
+<span class="nc" id="L162">                case '\f' -&gt; sb.append(&quot;\\f&quot;);</span>
+<span class="nc" id="L163">                case '\n' -&gt; sb.append(&quot;\\n&quot;);</span>
+<span class="nc" id="L164">                case '\r' -&gt; sb.append(&quot;\\r&quot;);</span>
+<span class="nc" id="L165">                case '\t' -&gt; sb.append(&quot;\\t&quot;);</span>
+                default -&gt; {
+<span class="pc bpc" id="L167" title="2 of 6 branches missed.">                    if (c &lt; 0x20 || (ensureAscii &amp;&amp; c &gt; 0x7e)) {</span>
+                        // Escaping per UTF-16 unit reproduces Python's surrogate-pair output for
+                        // astral code points without any extra branching.
+<span class="nc" id="L170">                        sb.append(String.format(java.util.Locale.ROOT, &quot;\\u%04x&quot;, (int) c));</span>
+                    } else {
+<span class="fc" id="L172">                        sb.append(c);</span>
+                    }
+                }
+            }
+        }
+<span class="fc" id="L177">        sb.append('&quot;');</span>
+<span class="fc" id="L178">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

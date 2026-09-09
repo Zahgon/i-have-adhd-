@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckPiExtension.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.pi</a> &gt; <span class="el_source">CheckPiExtension.java</span></div><h1>CheckPiExtension.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.pi;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.ayghri.adhd.util.PyAssert;
+import io.github.ayghri.adhd.util.PyRuntimeError;
+import io.github.ayghri.adhd.util.PythonJson;
+import io.github.ayghri.adhd.util.ProcResult;
+import io.github.ayghri.adhd.util.ProcRunner;
+import io.github.ayghri.adhd.util.RepoRoot;
+import io.github.ayghri.adhd.util.Which;
+
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/** Port of {@code scripts/check_pi_extension.py}. */
+public final class CheckPiExtension {
+
+    private static final String RELOAD_PROBE_SOURCE =
+            &quot;&quot;&quot;
+            import { existsSync } from &quot;node:fs&quot;;
+            import type { ExtensionAPI } from &quot;@earendil-works/pi-coding-agent&quot;;
+            const passthroughProbeFlag = __PASSTHROUGH_PROBE_FLAG__;
+            export default function (pi: ExtensionAPI) {
+              pi.registerCommand(&quot;reload-probe&quot;, {
+                description: &quot;Reload Pi for smoke testing&quot;,
+                handler: async (_args, ctx) =&gt; { await ctx.reload(); },
+              });
+              pi.on(&quot;input&quot;, async (event) =&gt; {
+                if (!existsSync(passthroughProbeFlag) || event.text.trim().toLowerCase() !== &quot;normal mode&quot;) {
+                  return { action: &quot;continue&quot; };
+                }
+                pi.appendEntry(&quot;passthrough-probe&quot;, { seen: true });
+                return { action: &quot;handled&quot; };
+              });
+            }
+            &quot;&quot;&quot;;
+
+    private CheckPiExtension() {}
+
+    /**
+     * Stands in for the {@code SystemExit} argparse raises: the status has to unwind to {@code main}
+     * rather than be applied in place, because a parser that calls {@code System.exit} itself cannot
+     * be exercised by a test without taking the whole JVM down with it.
+     */
+    static final class CliExit extends RuntimeException {
+        private final int status;
+
+        CliExit(int status) {
+<span class="fc" id="L59">            super(null, null, false, false);</span>
+<span class="fc" id="L60">            this.status = status;</span>
+<span class="fc" id="L61">        }</span>
+
+        int status() {
+<span class="fc" id="L64">            return status;</span>
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+<span class="nc" id="L70">            run(parseRuntime(args, System.out, System.err), RepoRoot.resolve(), System.out);</span>
+<span class="nc" id="L71">        } catch (CliExit exit) {</span>
+<span class="nc" id="L72">            System.exit(exit.status());</span>
+<span class="nc" id="L73">        } catch (RuntimeException | AssertionError exc) {</span>
+<span class="nc" id="L74">            exc.printStackTrace(System.err);</span>
+<span class="nc" id="L75">            System.exit(1);</span>
+<span class="nc" id="L76">        }</span>
+<span class="nc" id="L77">    }</span>
+
+    static String parseRuntime(String[] args, PrintStream out, PrintStream err) {
+<span class="fc" id="L80">        String runtime = &quot;pi&quot;;</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        for (int i = 0; i &lt; args.length; i++) {</span>
+<span class="fc" id="L82">            String arg = args[i];</span>
+<span class="fc bfc" id="L83" title="All 4 branches covered.">            if (arg.equals(&quot;-h&quot;) || arg.equals(&quot;--help&quot;)) {</span>
+<span class="fc" id="L84">                out.println(&quot;usage: check_pi_extension.py [-h] [--runtime {pi,omp}]&quot;);</span>
+<span class="fc" id="L85">                out.println();</span>
+<span class="fc" id="L86">                out.println(&quot;Smoke-test the i-have-adhd extension without a model request.&quot;);</span>
+<span class="fc" id="L87">                out.println();</span>
+<span class="fc" id="L88">                out.println(&quot;options:&quot;);</span>
+<span class="fc" id="L89">                out.println(&quot;  -h, --help          show this help message and exit&quot;);</span>
+<span class="fc" id="L90">                out.println(&quot;  --runtime {pi,omp}  Agent runtime to exercise (default: pi)&quot;);</span>
+<span class="fc" id="L91">                throw new CliExit(0);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">            } else if (arg.equals(&quot;--runtime&quot;)) {</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">                if (i + 1 &gt;= args.length) {</span>
+<span class="fc" id="L94">                    throw usageError(err, &quot;argument --runtime: expected one argument&quot;);</span>
+                }
+<span class="fc" id="L96">                runtime = args[++i];</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">            } else if (arg.startsWith(&quot;--runtime=&quot;)) {</span>
+<span class="fc" id="L98">                runtime = arg.substring(&quot;--runtime=&quot;.length());</span>
+            } else {
+<span class="fc" id="L100">                throw usageError(err, &quot;unrecognized arguments: &quot; + arg);</span>
+            }
+        }
+<span class="fc bfc" id="L103" title="All 4 branches covered.">        if (!runtime.equals(&quot;pi&quot;) &amp;&amp; !runtime.equals(&quot;omp&quot;)) {</span>
+<span class="fc" id="L104">            throw usageError(</span>
+                    err, &quot;argument --runtime: invalid choice: '&quot; + runtime + &quot;' (choose from 'pi', 'omp')&quot;);
+        }
+<span class="fc" id="L107">        return runtime;</span>
+    }
+
+    private static CliExit usageError(PrintStream err, String message) {
+<span class="fc" id="L111">        err.println(&quot;usage: check_pi_extension.py [-h] [--runtime {pi,omp}]&quot;);</span>
+<span class="fc" id="L112">        err.println(&quot;check_pi_extension.py: error: &quot; + message);</span>
+<span class="fc" id="L113">        return new CliExit(2);</span>
+    }
+
+    public static void run(String runtime, Path root, PrintStream out) {
+<span class="fc" id="L117">        ManifestValidator.validatePackageManifest(root);</span>
+
+<span class="fc" id="L119">        String executable = Which.which(runtime);</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">        if (executable == null) {</span>
+<span class="fc" id="L121">            throw new PyRuntimeError(runtime + &quot; executable is not available&quot;);</span>
+        }
+
+<span class="nc" id="L124">        Path agentDir = createTempDirectory(&quot;i-have-adhd-&quot; + runtime + &quot;-&quot;);</span>
+        try {
+<span class="nc" id="L126">            Map&lt;String, String&gt; env = IsolatedEnv.build(agentDir);</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            if (runtime.equals(&quot;omp&quot;)) {</span>
+<span class="nc" id="L128">                env.remove(&quot;PI_CODING_AGENT_DIR&quot;);</span>
+            } else {
+<span class="nc" id="L130">                ProcResult install = ProcRunner.run(List.of(executable, &quot;install&quot;, root.toString()), root, env, null);</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">                if (install.returncode() != 0) {</span>
+<span class="nc" id="L132">                    throw new PyRuntimeError(</span>
+                            &quot;Command '[&quot; + executable + &quot;, install, &quot; + root + &quot;]' returned non-zero exit status &quot;
+<span class="nc" id="L134">                                    + install.returncode() + &quot;.&quot;);</span>
+                }
+            }
+
+<span class="nc bnc" id="L138" title="All 2 branches missed.">            List&lt;String&gt; extensionArgs = runtime.equals(&quot;pi&quot;)</span>
+<span class="nc" id="L139">                    ? List.of()</span>
+<span class="nc" id="L140">                    : List.of(&quot;--no-extensions&quot;, &quot;-e&quot;, root.toString());</span>
+
+<span class="nc" id="L142">            Path reloadProbe = agentDir.resolve(&quot;reload-probe.ts&quot;);</span>
+<span class="nc" id="L143">            Path passthroughProbeFlag = agentDir.resolve(&quot;passthrough-probe-enabled&quot;);</span>
+<span class="nc" id="L144">            writeString(reloadProbe, RELOAD_PROBE_SOURCE.replace(</span>
+                    &quot;__PASSTHROUGH_PROBE_FLAG__&quot;,
+<span class="nc" id="L146">                    PythonJson.dumps(PythonJson.MAPPER.getNodeFactory().textNode(passthroughProbeFlag.toString()))));</span>
+
+<span class="nc" id="L148">            List&lt;String&gt; clientArgs = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L149">            clientArgs.add(&quot;--no-session&quot;);</span>
+<span class="nc" id="L150">            clientArgs.addAll(extensionArgs);</span>
+<span class="nc" id="L151">            clientArgs.add(&quot;-e&quot;);</span>
+<span class="nc" id="L152">            clientArgs.add(reloadProbe.toString());</span>
+<span class="nc" id="L153">            clientArgs.add(&quot;--adhd&quot;);</span>
+
+<span class="nc" id="L155">            RpcClient client = new RpcClient(executable, env, root, clientArgs);</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">            if (runtime.equals(&quot;omp&quot;)) {</span>
+                try {
+<span class="nc" id="L158">                    checkOmpStartup(client);</span>
+                } finally {
+<span class="nc" id="L160">                    client.close();</span>
+                }
+<span class="nc" id="L162">                out.println(&quot;omp extension smoke test passed&quot;);</span>
+<span class="nc" id="L163">                return;</span>
+            }
+
+            try {
+<span class="nc" id="L167">                checkPiSession(client, passthroughProbeFlag);</span>
+            } finally {
+<span class="nc" id="L169">                client.close();</span>
+            }
+
+<span class="nc" id="L172">            touch(agentDir.resolve(&quot;.i-have-adhd-always&quot;));</span>
+<span class="nc" id="L173">            List&lt;String&gt; alwaysOnArgs = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L174">            alwaysOnArgs.add(&quot;--no-session&quot;);</span>
+<span class="nc" id="L175">            alwaysOnArgs.addAll(extensionArgs);</span>
+<span class="nc" id="L176">            RpcClient alwaysOn = new RpcClient(executable, env, root, alwaysOnArgs);</span>
+            try {
+<span class="nc" id="L178">                RpcClient.RpcResponse state = alwaysOn.request(&quot;always-on&quot;, command(&quot;get_state&quot;));</span>
+<span class="nc" id="L179">                PyAssert.check(EventHelpers.anyStatusContains(state.events(), &quot;ADHD ON&quot;));</span>
+            } finally {
+<span class="nc" id="L181">                alwaysOn.close();</span>
+            }
+        } finally {
+<span class="nc" id="L184">            deleteRecursively(agentDir);</span>
+        }
+
+<span class="nc" id="L187">        out.println(runtime + &quot; extension smoke test passed&quot;);</span>
+<span class="nc" id="L188">    }</span>
+
+    static void checkOmpStartup(RpcClient client) {
+<span class="fc" id="L191">        List&lt;JsonNode&gt; startupEvents =</span>
+<span class="fc" id="L192">                client.eventsUntil(event -&gt; EventHelpers.is(event, &quot;type&quot;, &quot;available_commands_update&quot;));</span>
+<span class="fc" id="L193">        JsonNode commandEvent = startupEvents.get(startupEvents.size() - 1);</span>
+<span class="fc" id="L194">        Set&lt;String&gt; names = commandNames(commandEvent.get(&quot;commands&quot;));</span>
+<span class="fc" id="L195">        PyAssert.check(names.contains(&quot;i-have-adhd&quot;));</span>
+<span class="fc" id="L196">        PyAssert.check(names.contains(&quot;skill:i-have-adhd&quot;));</span>
+<span class="fc" id="L197">        PyAssert.check(EventHelpers.anyStatusContains(startupEvents, &quot;ADHD ON&quot;));</span>
+<span class="fc" id="L198">    }</span>
+
+    static void checkPiSession(RpcClient client, Path passthroughProbeFlag) {
+<span class="fc" id="L201">        RpcClient.RpcResponse commands = client.request(&quot;commands&quot;, command(&quot;get_commands&quot;));</span>
+<span class="fc" id="L202">        Set&lt;String&gt; names = commandNames(commands.response().get(&quot;data&quot;).get(&quot;commands&quot;));</span>
+<span class="fc" id="L203">        PyAssert.check(names.contains(&quot;i-have-adhd&quot;));</span>
+<span class="fc" id="L204">        PyAssert.check(names.contains(&quot;skill:i-have-adhd&quot;));</span>
+<span class="fc" id="L205">        PyAssert.check(EventHelpers.anyStatusContains(commands.events(), &quot;ADHD ON&quot;));</span>
+
+<span class="fc" id="L207">        JsonNode entries = client.request(&quot;entries-startup&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-rules&quot;) == 1);</span>
+<span class="pc bpc" id="L209" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-disabled&quot;) == 0);</span>
+
+<span class="fc" id="L211">        RpcClient.RpcResponse reloaded = client.request(&quot;reload-enabled&quot;, prompt(&quot;/reload-probe&quot;));</span>
+<span class="fc" id="L212">        checkSuccess(reloaded.response());</span>
+<span class="fc" id="L213">        PyAssert.check(EventHelpers.anyStatusContains(reloaded.events(), &quot;ADHD ON&quot;));</span>
+
+<span class="fc" id="L215">        entries = client.request(&quot;entries-reloaded&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-rules&quot;) == 1,</span>
+                &quot;Rules were injected twice for one active session&quot;);
+
+<span class="fc" id="L219">        RpcClient.RpcResponse toggledOff = client.request(&quot;toggle-off&quot;, prompt(&quot;/i-have-adhd&quot;));</span>
+<span class="fc" id="L220">        checkSuccess(toggledOff.response());</span>
+<span class="fc" id="L221">        PyAssert.check(EventHelpers.statusTexts(toggledOff.events()).contains(null));</span>
+
+<span class="fc" id="L223">        entries = client.request(&quot;entries-toggled-off&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">        PyAssert.check(!EventHelpers.latestEnabled(entries));</span>
+<span class="pc bpc" id="L225" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-disabled&quot;) == 1);</span>
+
+<span class="fc" id="L227">        RpcClient.RpcResponse reloadDisabled = client.request(&quot;reload-disabled&quot;, prompt(&quot;/reload-probe&quot;));</span>
+<span class="fc" id="L228">        checkSuccess(reloadDisabled.response());</span>
+<span class="pc bpc" id="L229" title="1 of 2 branches missed.">        PyAssert.check(!EventHelpers.anyStatusContains(reloadDisabled.events(), &quot;ADHD ON&quot;));</span>
+
+<span class="fc" id="L231">        entries = client.request(&quot;entries-reload-disabled&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="pc bpc" id="L232" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-rules&quot;) == 1);</span>
+<span class="pc bpc" id="L233" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-disabled&quot;) == 1);</span>
+
+<span class="fc" id="L235">        RpcClient.RpcResponse toggledOn = client.request(&quot;toggle-on&quot;, prompt(&quot;/i-have-adhd&quot;));</span>
+<span class="fc" id="L236">        checkSuccess(toggledOn.response());</span>
+<span class="fc" id="L237">        PyAssert.check(EventHelpers.anyStatusContains(toggledOn.events(), &quot;ADHD ON&quot;));</span>
+
+<span class="fc" id="L239">        entries = client.request(&quot;entries-toggled-on&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="fc" id="L240">        PyAssert.check(EventHelpers.latestEnabled(entries));</span>
+<span class="pc bpc" id="L241" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-rules&quot;) == 2);</span>
+
+<span class="fc" id="L243">        checkSuccess(client.request(&quot;explicit-off&quot;, prompt(&quot;/i-have-adhd off&quot;)).response());</span>
+
+<span class="fc" id="L245">        RpcClient.RpcResponse skill = client.request(&quot;skill-alias&quot;, prompt(&quot;/skill:i-have-adhd&quot;));</span>
+<span class="fc" id="L246">        checkSuccess(skill.response());</span>
+<span class="fc" id="L247">        PyAssert.check(skill.events().stream().noneMatch(event -&gt; EventHelpers.is(event, &quot;type&quot;, &quot;agent_start&quot;)));</span>
+
+<span class="fc" id="L249">        entries = client.request(&quot;entries-enabled&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="fc" id="L250">        PyAssert.check(EventHelpers.latestEnabled(entries));</span>
+<span class="pc bpc" id="L251" title="1 of 2 branches missed.">        PyAssert.check(EventHelpers.messageCount(entries, &quot;i-have-adhd-rules&quot;) == 3);</span>
+
+<span class="fc" id="L253">        RpcClient.RpcResponse stopped = client.request(&quot;stop-phrase&quot;, prompt(&quot;normal mode&quot;));</span>
+<span class="fc" id="L254">        checkSuccess(stopped.response());</span>
+<span class="fc" id="L255">        PyAssert.check(EventHelpers.statusTexts(stopped.events()).contains(null));</span>
+
+<span class="fc" id="L257">        entries = client.request(&quot;entries-stopped&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="pc bpc" id="L258" title="1 of 2 branches missed.">        PyAssert.check(!EventHelpers.latestEnabled(entries));</span>
+
+<span class="fc" id="L260">        touch(passthroughProbeFlag);</span>
+<span class="fc" id="L261">        checkSuccess(client.request(&quot;disabled-passthrough&quot;, prompt(&quot;normal mode&quot;)).response());</span>
+
+<span class="fc" id="L263">        entries = client.request(&quot;entries-passthrough&quot;, command(&quot;get_entries&quot;)).response();</span>
+<span class="fc" id="L264">        PyAssert.check(</span>
+<span class="pc bpc" id="L265" title="1 of 2 branches missed.">                EventHelpers.entries(entries).stream().anyMatch(entry -&gt; EventHelpers.is(entry, &quot;type&quot;, &quot;custom&quot;)</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">                        &amp;&amp; EventHelpers.is(entry, &quot;customType&quot;, &quot;passthrough-probe&quot;)</span>
+<span class="pc bpc" id="L267" title="1 of 2 branches missed.">                        &amp;&amp; entry.path(&quot;data&quot;).path(&quot;seen&quot;).isBoolean()</span>
+<span class="pc bpc" id="L268" title="1 of 2 branches missed.">                        &amp;&amp; entry.path(&quot;data&quot;).path(&quot;seen&quot;).booleanValue()),</span>
+                &quot;Disabled mode swallowed ordinary input&quot;);
+<span class="fc" id="L270">    }</span>
+
+    private static void checkSuccess(JsonNode response) {
+<span class="fc" id="L273">        JsonNode success = response.get(&quot;success&quot;);</span>
+<span class="pc bpc" id="L274" title="3 of 6 branches missed.">        PyAssert.check(success != null &amp;&amp; success.isBoolean() &amp;&amp; success.booleanValue());</span>
+<span class="fc" id="L275">    }</span>
+
+    private static Set&lt;String&gt; commandNames(JsonNode commands) {
+<span class="fc" id="L278">        Set&lt;String&gt; names = new HashSet&lt;&gt;();</span>
+<span class="pc bpc" id="L279" title="2 of 4 branches missed.">        if (commands != null &amp;&amp; commands.isArray()) {</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">            for (JsonNode entry : commands) {</span>
+<span class="fc" id="L281">                names.add(entry.get(&quot;name&quot;).textValue());</span>
+<span class="fc" id="L282">            }</span>
+        }
+<span class="fc" id="L284">        return names;</span>
+    }
+
+    private static ObjectNode command(String type) {
+<span class="fc" id="L288">        ObjectNode node = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L289">        node.put(&quot;type&quot;, type);</span>
+<span class="fc" id="L290">        return node;</span>
+    }
+
+    private static ObjectNode prompt(String message) {
+<span class="fc" id="L294">        ObjectNode node = command(&quot;prompt&quot;);</span>
+<span class="fc" id="L295">        node.put(&quot;message&quot;, message);</span>
+<span class="fc" id="L296">        return node;</span>
+    }
+
+    static Path createTempDirectory(String prefix) {
+        try {
+<span class="fc" id="L301">            return Files.createTempDirectory(prefix);</span>
+<span class="nc" id="L302">        } catch (IOException exc) {</span>
+<span class="nc" id="L303">            throw new UncheckedIOException(exc);</span>
+        }
+    }
+
+    static void writeString(Path path, String content) {
+        try {
+<span class="fc" id="L309">            Files.writeString(path, content, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L310">        } catch (IOException exc) {</span>
+<span class="fc" id="L311">            throw new UncheckedIOException(exc);</span>
+<span class="fc" id="L312">        }</span>
+<span class="fc" id="L313">    }</span>
+
+    private static void touch(Path path) {
+        try {
+<span class="pc bpc" id="L317" title="1 of 2 branches missed.">            if (!Files.exists(path)) {</span>
+<span class="fc" id="L318">                Files.createFile(path);</span>
+            } else {
+<span class="nc" id="L320">                Files.setLastModifiedTime(path, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));</span>
+            }
+<span class="nc" id="L322">        } catch (IOException exc) {</span>
+<span class="nc" id="L323">            throw new UncheckedIOException(exc);</span>
+<span class="fc" id="L324">        }</span>
+<span class="fc" id="L325">    }</span>
+
+    static void deleteRecursively(Path root) {
+<span class="fc" id="L328">        try (var paths = Files.walk(root)) {</span>
+<span class="fc" id="L329">            paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -&gt; {</span>
+                try {
+<span class="fc" id="L331">                    Files.deleteIfExists(path);</span>
+<span class="nc" id="L332">                } catch (IOException ignored) {</span>
+                    // Best-effort cleanup, matching TemporaryDirectory's default behaviour.
+<span class="fc" id="L334">                }</span>
+<span class="fc" id="L335">            });</span>
+<span class="fc" id="L336">        } catch (IOException ignored) {</span>
+            // The directory may already be gone.
+<span class="fc" id="L338">        }</span>
+<span class="fc" id="L339">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

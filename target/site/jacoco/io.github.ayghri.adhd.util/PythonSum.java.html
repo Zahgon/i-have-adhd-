@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PythonSum.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">PythonSum.java</span></div><h1>PythonSum.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+/**
+ * CPython's {@code sum()} over floats, which is NOT a naive accumulation.
+ *
+ * &lt;p&gt;Since CPython 3.12 the {@code builtin_sum} fast path applies Neumaier compensated summation
+ * once it encounters a float. A plain {@code for} loop in Java therefore produces a different
+ * {@code double} than the source program for the very same inputs, and because the results are
+ * printed with shortest-round-trip formatting the difference is directly visible in stdout: the
+ * evaluation harness prints {@code 2.3000000000000003} where a naive loop yields {@code 2.3}.
+ *
+ * &lt;p&gt;Do not &quot;simplify&quot; this into {@code DoubleStream.sum()} or a {@code +=} loop. Both are
+ * arithmetically reasonable and both silently break output parity.
+ */
+public final class PythonSum {
+
+    private PythonSum() {}
+
+    /** Mirrors the compensated accumulation in CPython's {@code builtin_sum}. */
+    public static double sum(Iterable&lt;Double&gt; values) {
+<span class="fc" id="L21">        double result = 0.0;</span>
+<span class="fc" id="L22">        double compensation = 0.0;</span>
+<span class="fc bfc" id="L23" title="All 2 branches covered.">        for (double value : values) {</span>
+<span class="fc" id="L24">            double total = result + value;</span>
+<span class="fc bfc" id="L25" title="All 2 branches covered.">            if (Math.abs(result) &gt;= Math.abs(value)) {</span>
+<span class="fc" id="L26">                compensation += (result - total) + value;</span>
+            } else {
+<span class="fc" id="L28">                compensation += (value - total) + result;</span>
+            }
+<span class="fc" id="L30">            result = total;</span>
+<span class="fc" id="L31">        }</span>
+<span class="fc" id="L32">        return result + compensation;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ShlexJoin.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">ShlexJoin.java</span></div><h1>ShlexJoin.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/** Port of Python's {@code shlex.join} / {@code shlex.quote}. */
+public final class ShlexJoin {
+
+    /**
+     * Python's {@code shlex._find_unsafe} is compiled with {@code re.ASCII}, so {@code \w} is exactly
+     * {@code [A-Za-z0-9_]}. Java's {@code \w} is ASCII-only by default too (it would only widen under
+     * UNICODE_CHARACTER_CLASS), so the two agree without further flags.
+     */
+<span class="fc" id="L15">    private static final Pattern UNSAFE = Pattern.compile(&quot;[^\\w@%+=:,./-]&quot;);</span>
+
+    private ShlexJoin() {}
+
+    public static String join(List&lt;String&gt; parts) {
+<span class="fc" id="L20">        return parts.stream().map(ShlexJoin::quote).collect(Collectors.joining(&quot; &quot;));</span>
+    }
+
+    public static String quote(String value) {
+<span class="fc bfc" id="L24" title="All 2 branches covered.">        if (value.isEmpty()) {</span>
+<span class="fc" id="L25">            return &quot;''&quot;;</span>
+        }
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        if (!UNSAFE.matcher(value).find()) {</span>
+<span class="fc" id="L28">            return value;</span>
+        }
+        // Wrap in single quotes and splice any embedded single quote back in as '&quot;'&quot;'.
+<span class="fc" id="L31">        return &quot;'&quot; + value.replace(&quot;'&quot;, &quot;'\&quot;'\&quot;'&quot;) + &quot;'&quot;;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

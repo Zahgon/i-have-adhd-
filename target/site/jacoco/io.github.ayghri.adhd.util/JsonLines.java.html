@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonLines.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">JsonLines.java</span></div><h1>JsonLines.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/** Port of {@code read_jsonl}. */
+public final class JsonLines {
+
+    private JsonLines() {}
+
+    /**
+     * Reads a JSONL file into one node per non-blank line.
+     *
+     * &lt;p&gt;Line numbers are 1-based and count blank lines, matching {@code enumerate(..., start=1)}
+     * over the full {@code splitlines()} result.
+     */
+    public static List&lt;JsonNode&gt; readJsonl(Path path) {
+<span class="fc" id="L27">        List&lt;JsonNode&gt; rows = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L28">        int number = 0;</span>
+<span class="fc bfc" id="L29" title="All 2 branches covered.">        for (String line : splitLines(readText(path))) {</span>
+<span class="fc" id="L30">            number++;</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">            if (line.isBlank()) {</span>
+<span class="nc" id="L32">                continue;</span>
+            }
+            JsonNode row;
+            try {
+<span class="fc" id="L36">                row = loads(line);</span>
+<span class="fc" id="L37">            } catch (PyJsonDecodeError exc) {</span>
+<span class="fc" id="L38">                throw new PyValueError(path + &quot;: line &quot; + number + &quot;: &quot; + exc.msg(), exc);</span>
+<span class="fc" id="L39">            }</span>
+<span class="pc bpc" id="L40" title="2 of 4 branches missed.">            if (row == null || !row.isObject()) {</span>
+<span class="nc" id="L41">                throw new PyValueError(path + &quot;: line &quot; + number + &quot;: expected a JSON object&quot;);</span>
+            }
+<span class="fc" id="L43">            rows.add(row);</span>
+<span class="fc" id="L44">        }</span>
+<span class="fc" id="L45">        return rows;</span>
+    }
+
+    /**
+     * Port of {@code json.loads}.
+     *
+     * &lt;p&gt;Trailing content is detected here rather than delegated to Jackson's
+     * {@code FAIL_ON_TRAILING_TOKENS}: Jackson tokenizes the trailing bytes first and reports
+     * whatever lexical complaint it hits (&quot;Unrecognized token&quot;), while Python reports the generic
+     * {@code Extra data} anchored at the first non-space character after the value.
+     */
+    public static JsonNode loads(String text) {
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        if (text.startsWith(&quot;\uFEFF&quot;)) {</span>
+<span class="fc" id="L58">            throw new PyJsonDecodeError(&quot;Unexpected UTF-8 BOM (decode using utf-8-sig)&quot;, text, 0);</span>
+        }
+        JsonNode node;
+        long consumed;
+<span class="fc" id="L62">        try (JsonParser parser = PythonJson.MAPPER.createParser(text)) {</span>
+<span class="fc" id="L63">            node = PythonJson.MAPPER.readTree(parser);</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">            if (node == null) {</span>
+<span class="nc" id="L65">                throw new PyJsonDecodeError(&quot;Expecting value&quot;, text, text.length());</span>
+            }
+<span class="fc" id="L67">            consumed = parser.currentLocation().getCharOffset();</span>
+<span class="fc" id="L68">        } catch (JsonProcessingException exc) {</span>
+<span class="fc" id="L69">            throw new PyJsonDecodeError(decodeErrorMessage(exc), text, offsetOf(exc, text));</span>
+<span class="nc" id="L70">        } catch (IOException exc) {</span>
+<span class="nc" id="L71">            throw new PyJsonDecodeError(&quot;Expecting value&quot;, text, 0);</span>
+<span class="fc" id="L72">        }</span>
+<span class="fc" id="L73">        int extra = (int) consumed;</span>
+<span class="fc bfc" id="L74" title="All 4 branches covered.">        while (extra &lt; text.length() &amp;&amp; Character.isWhitespace(text.charAt(extra))) {</span>
+<span class="fc" id="L75">            extra++;</span>
+        }
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        if (extra &lt; text.length()) {</span>
+<span class="fc" id="L78">            throw new PyJsonDecodeError(&quot;Extra data&quot;, text, extra);</span>
+        }
+<span class="fc" id="L80">        return node;</span>
+    }
+
+    private static int offsetOf(JsonProcessingException exc, String text) {
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">        if (exc.getLocation() == null) {</span>
+<span class="nc" id="L85">            return 0;</span>
+        }
+<span class="fc" id="L87">        long offset = exc.getLocation().getCharOffset();</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">        if (offset &lt; 0) {</span>
+<span class="nc" id="L89">            return 0;</span>
+        }
+<span class="fc" id="L91">        return (int) Math.min(offset, text.length());</span>
+    }
+
+    public static String readText(Path path) {
+        try {
+<span class="fc" id="L96">            return universalNewlines(Files.readString(path, StandardCharsets.UTF_8));</span>
+<span class="nc" id="L97">        } catch (IOException exc) {</span>
+<span class="nc" id="L98">            throw PyOsError.from(exc, path);</span>
+        }
+    }
+
+    /**
+     * Python opens text files with {@code newline=None}, so {@code read_text} rewrites CRLF and lone
+     * CR to LF before any caller sees them. {@link Files#readString} does not, which would otherwise
+     * leak a stray CR into the prompt built from a CRLF skill file.
+     */
+    private static String universalNewlines(String text) {
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        if (text.indexOf('\r') &lt; 0) {</span>
+<span class="fc" id="L109">            return text;</span>
+        }
+<span class="nc" id="L111">        return text.replace(&quot;\r\n&quot;, &quot;\n&quot;).replace('\r', '\n');</span>
+    }
+
+    /**
+     * Python's {@code str.splitlines} breaks on many more boundaries than {@code String.split(&quot;\n&quot;)},
+     * and critically it returns an empty list for an empty string rather than one empty element.
+     */
+    public static List&lt;String&gt; splitLines(String text) {
+<span class="fc" id="L119">        List&lt;String&gt; lines = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L120">        int start = 0;</span>
+<span class="fc" id="L121">        int i = 0;</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        while (i &lt; text.length()) {</span>
+<span class="fc" id="L123">            char c = text.charAt(i);</span>
+<span class="pc bpc" id="L124" title="5 of 6 branches missed.">            boolean crlf = c == '\r' &amp;&amp; i + 1 &lt; text.length() &amp;&amp; text.charAt(i + 1) == '\n';</span>
+<span class="pc bpc" id="L125" title="9 of 20 branches missed.">            if (c == '\n' || c == '\r' || c == '\u000b' || c == '\f' || c == '\u001c' || c == '\u001d'</span>
+                    || c == '\u001e' || c == '\u0085' || c == '\u2028' || c == '\u2029') {
+<span class="fc" id="L127">                lines.add(text.substring(start, i));</span>
+<span class="pc bpc" id="L128" title="1 of 2 branches missed.">                i += crlf ? 2 : 1;</span>
+<span class="fc" id="L129">                start = i;</span>
+<span class="fc" id="L130">                continue;</span>
+            }
+<span class="fc" id="L132">            i++;</span>
+<span class="fc" id="L133">        }</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">        if (start &lt; text.length()) {</span>
+<span class="nc" id="L135">            lines.add(text.substring(start));</span>
+        }
+<span class="fc" id="L137">        return lines;</span>
+    }
+
+    /**
+     * Best-effort translation of Jackson parse failures into the {@code msg} text that Python's
+     * {@code JSONDecodeError} would carry, since the source interpolates {@code exc.msg} verbatim.
+     * The mapped cases cover what malformed JSONL realistically produces; anything unrecognised falls
+     * back to Python's own catch-all, {@code Expecting value}.
+     */
+    private static String decodeErrorMessage(JsonProcessingException exc) {
+<span class="pc bpc" id="L147" title="1 of 2 branches missed.">        String raw = exc.getOriginalMessage() == null ? &quot;&quot; : exc.getOriginalMessage().toLowerCase(Locale.ROOT);</span>
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">        if (raw.contains(&quot;trailing token&quot;)) {</span>
+<span class="nc" id="L149">            return &quot;Extra data&quot;;</span>
+        }
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">        if (raw.contains(&quot;was expecting a colon&quot;)) {</span>
+<span class="nc" id="L152">            return &quot;Expecting ':' delimiter&quot;;</span>
+        }
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">        if (raw.contains(&quot;was expecting comma&quot;)) {</span>
+<span class="nc" id="L155">            return &quot;Expecting ',' delimiter&quot;;</span>
+        }
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">        if (raw.contains(&quot;was expecting double-quote to start field name&quot;)) {</span>
+<span class="nc" id="L158">            return &quot;Expecting property name enclosed in double quotes&quot;;</span>
+        }
+<span class="pc bpc" id="L160" title="2 of 4 branches missed.">        if (raw.contains(&quot;closing quote&quot;) || raw.contains(&quot;in vALUE_STRING&quot;.toLowerCase(Locale.ROOT))) {</span>
+<span class="nc" id="L161">            return &quot;Unterminated string starting at&quot;;</span>
+        }
+<span class="fc" id="L163">        return &quot;Expecting value&quot;;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ManifestValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.pi</a> &gt; <span class="el_source">ManifestValidator.java</span></div><h1>ManifestValidator.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.pi;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.github.ayghri.adhd.util.JsonLines;
+import io.github.ayghri.adhd.util.PyAssert;
+import io.github.ayghri.adhd.util.PythonJson;
+
+import java.nio.file.Path;
+import java.util.List;
+
+/** Port of {@code validate_package_manifest}. */
+public final class ManifestValidator {
+
+<span class="fc" id="L14">    public static final List&lt;String&gt; SHARED_MANIFEST_FIELDS =</span>
+<span class="fc" id="L15">            List.of(&quot;name&quot;, &quot;version&quot;, &quot;description&quot;, &quot;license&quot;, &quot;homepage&quot;);</span>
+
+    private ManifestValidator() {}
+
+    public static void validatePackageManifest(Path root) {
+<span class="fc" id="L20">        JsonNode packageJson = JsonLines.loads(JsonLines.readText(root.resolve(&quot;package.json&quot;)));</span>
+<span class="fc" id="L21">        JsonNode kimiJson = JsonLines.loads(JsonLines.readText(root.resolve(&quot;kimi.plugin.json&quot;)));</span>
+
+<span class="fc bfc" id="L23" title="All 2 branches covered.">        for (String field : SHARED_MANIFEST_FIELDS) {</span>
+<span class="fc" id="L24">            PyAssert.check(</span>
+<span class="fc" id="L25">                    equalOrBothAbsent(packageJson.get(field), kimiJson.get(field)),</span>
+                    &quot;package.json and kimi.plugin.json disagree on &quot; + field);
+<span class="fc" id="L27">        }</span>
+
+<span class="fc" id="L29">        PyAssert.check(matches(</span>
+<span class="fc" id="L30">                packageJson.get(&quot;pi&quot;),</span>
+                &quot;{\&quot;extensions\&quot;: [\&quot;./extensions/i-have-adhd.ts\&quot;], \&quot;skills\&quot;: [\&quot;./skills\&quot;]}&quot;));
+<span class="fc" id="L32">        PyAssert.check(matches(</span>
+<span class="fc" id="L33">                packageJson.get(&quot;omp&quot;), &quot;{\&quot;extensions\&quot;: [\&quot;./extensions/i-have-adhd.ts\&quot;]}&quot;));</span>
+<span class="fc" id="L34">    }</span>
+
+    private static boolean matches(JsonNode actual, String expectedJson) {
+<span class="fc" id="L37">        return equalOrBothAbsent(actual, PythonJson.MAPPER.valueToTree(JsonLines.loads(expectedJson)));</span>
+    }
+
+    /**
+     * A missing key and an explicit JSON {@code null} both surface as Python's {@code None} from
+     * {@code dict.get}, so they must compare equal here even though Jackson distinguishes
+     * {@code null} from {@code NullNode}.
+     */
+    private static boolean equalOrBothAbsent(JsonNode left, JsonNode right) {
+<span class="fc bfc" id="L46" title="All 4 branches covered.">        boolean leftMissing = left == null || left.isNull();</span>
+<span class="fc bfc" id="L47" title="All 4 branches covered.">        boolean rightMissing = right == null || right.isNull();</span>
+<span class="pc bpc" id="L48" title="1 of 4 branches missed.">        if (leftMissing || rightMissing) {</span>
+<span class="pc bpc" id="L49" title="1 of 4 branches missed.">            return leftMissing &amp;&amp; rightMissing;</span>
+        }
+<span class="fc" id="L51">        return left.equals(right);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

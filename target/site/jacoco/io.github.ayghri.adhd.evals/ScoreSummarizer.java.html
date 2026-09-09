@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScoreSummarizer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">ScoreSummarizer.java</span></div><h1>ScoreSummarizer.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.ayghri.adhd.util.PythonJson;
+import io.github.ayghri.adhd.util.PythonStr;
+import io.github.ayghri.adhd.util.PythonSum;
+import io.github.ayghri.adhd.util.PyValueError;
+import io.github.ayghri.adhd.util.PythonValue;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
+/** Port of {@code _validate_score}, {@code _check_pairing} and {@code summarize_scores}. */
+public final class ScoreSummarizer {
+
+    /** Insertion order is observable in both error messages and JSON output. */
+<span class="fc" id="L25">    public static final Map&lt;String, Double&gt; WEIGHTS = weights();</span>
+
+<span class="fc" id="L27">    public static final Set&lt;String&gt; CONDITIONS = new LinkedHashSet&lt;&gt;(List.of(&quot;baseline&quot;, &quot;candidate&quot;, &quot;comparator&quot;));</span>
+
+    private static Map&lt;String, Double&gt; weights() {
+<span class="fc" id="L30">        Map&lt;String, Double&gt; map = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L31">        map.put(&quot;correctness&quot;, 0.35);</span>
+<span class="fc" id="L32">        map.put(&quot;autonomy&quot;, 0.25);</span>
+<span class="fc" id="L33">        map.put(&quot;actionability&quot;, 0.20);</span>
+<span class="fc" id="L34">        map.put(&quot;safety&quot;, 0.10);</span>
+<span class="fc" id="L35">        map.put(&quot;concision&quot;, 0.10);</span>
+<span class="fc" id="L36">        return java.util.Collections.unmodifiableMap(map);</span>
+    }
+
+    private ScoreSummarizer() {}
+
+    static void validateScore(JsonNode row, int index) {
+<span class="fc" id="L42">        Set&lt;String&gt; required = new LinkedHashSet&lt;&gt;(List.of(&quot;case_id&quot;, &quot;trial&quot;, &quot;condition&quot;));</span>
+<span class="fc" id="L43">        required.addAll(WEIGHTS.keySet());</span>
+<span class="fc" id="L44">        required.add(&quot;blocker&quot;);</span>
+<span class="fc" id="L45">        required.add(&quot;notes&quot;);</span>
+
+<span class="fc" id="L47">        List&lt;String&gt; missing = required.stream()</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">                .filter(field -&gt; !row.has(field))</span>
+<span class="fc" id="L49">                .sorted(PythonStr.CODE_POINT_ORDER)</span>
+<span class="fc" id="L50">                .toList();</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">        if (!missing.isEmpty()) {</span>
+<span class="nc" id="L52">            throw new PyValueError(&quot;Score row &quot; + index + &quot;: missing fields: &quot; + String.join(&quot;, &quot;, missing));</span>
+        }
+
+<span class="fc" id="L55">        JsonNode condition = row.get(&quot;condition&quot;);</span>
+<span class="pc bpc" id="L56" title="2 of 4 branches missed.">        if (!condition.isTextual() || !CONDITIONS.contains(condition.textValue())) {</span>
+<span class="nc" id="L57">            throw new PyValueError(</span>
+<span class="nc" id="L58">                    &quot;Score row &quot; + index + &quot;: unsupported condition &quot; + PythonStr.repr(PythonValue.str(condition)));</span>
+        }
+
+<span class="fc bfc" id="L61" title="All 2 branches covered.">        for (String metric : WEIGHTS.keySet()) {</span>
+<span class="fc" id="L62">            JsonNode value = row.get(metric);</span>
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">            if (!PythonValue.isPythonNumber(value)) {</span>
+<span class="nc" id="L64">                throw new PyValueError(&quot;Score row &quot; + index + &quot;: &quot; + metric + &quot; must be between 1 and 5&quot;);</span>
+            }
+<span class="fc" id="L66">            double numeric = PythonValue.numericValue(value);</span>
+<span class="pc bpc" id="L67" title="2 of 4 branches missed.">            if (!(1 &lt;= numeric &amp;&amp; numeric &lt;= 5)) {</span>
+<span class="nc" id="L68">                throw new PyValueError(&quot;Score row &quot; + index + &quot;: &quot; + metric + &quot; must be between 1 and 5&quot;);</span>
+            }
+<span class="fc" id="L70">        }</span>
+
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        if (!row.get(&quot;blocker&quot;).isBoolean()) {</span>
+<span class="nc" id="L73">            throw new PyValueError(&quot;Score row &quot; + index + &quot;: blocker must be boolean&quot;);</span>
+        }
+<span class="fc" id="L75">    }</span>
+
+    private static String describeRows(Collection&lt;RowKey&gt; keys) {
+<span class="fc" id="L78">        return keys.stream().map(RowKey::describe).collect(java.util.stream.Collectors.joining(&quot;, &quot;));</span>
+    }
+
+    static void checkPairing(Map&lt;String, List&lt;JsonNode&gt;&gt; grouped) {
+<span class="fc" id="L82">        Map&lt;String, Map&lt;RowKey, Integer&gt;&gt; coverage = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        for (Map.Entry&lt;String, List&lt;JsonNode&gt;&gt; entry : grouped.entrySet()) {</span>
+<span class="fc" id="L84">            Map&lt;RowKey, Integer&gt; counter = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">            for (JsonNode row : entry.getValue()) {</span>
+<span class="fc" id="L86">                counter.merge(RowKey.of(row), 1, Integer::sum);</span>
+<span class="fc" id="L87">            }</span>
+<span class="fc" id="L88">            coverage.put(entry.getKey(), counter);</span>
+<span class="fc" id="L89">        }</span>
+
+<span class="fc" id="L91">        Map&lt;String, Map&lt;RowKey, Integer&gt;&gt; sortedCoverage = new TreeMap&lt;&gt;(PythonStr.CODE_POINT_ORDER);</span>
+<span class="fc" id="L92">        sortedCoverage.putAll(coverage);</span>
+
+<span class="fc bfc" id="L94" title="All 2 branches covered.">        for (Map.Entry&lt;String, Map&lt;RowKey, Integer&gt;&gt; entry : sortedCoverage.entrySet()) {</span>
+<span class="fc" id="L95">            List&lt;RowKey&gt; repeated = entry.getValue().entrySet().stream()</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">                    .filter(e -&gt; e.getValue() &gt; 1)</span>
+<span class="fc" id="L97">                    .map(Map.Entry::getKey)</span>
+<span class="fc" id="L98">                    .sorted(RowKey.ORDER)</span>
+<span class="fc" id="L99">                    .toList();</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">            if (!repeated.isEmpty()) {</span>
+<span class="fc" id="L101">                throw new PyValueError(entry.getKey() + &quot;: duplicate score rows for &quot; + describeRows(repeated));</span>
+            }
+<span class="fc" id="L103">        }</span>
+
+<span class="fc" id="L105">        Map&lt;RowKey, Integer&gt; baseline = coverage.get(&quot;baseline&quot;);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        for (Map.Entry&lt;String, Map&lt;RowKey, Integer&gt;&gt; entry : sortedCoverage.entrySet()) {</span>
+<span class="fc" id="L107">            String condition = entry.getKey();</span>
+<span class="fc" id="L108">            Map&lt;RowKey, Integer&gt; counts = entry.getValue();</span>
+<span class="fc bfc" id="L109" title="All 4 branches covered.">            if (condition.equals(&quot;baseline&quot;) || counts.equals(baseline)) {</span>
+<span class="fc" id="L110">                continue;</span>
+            }
+
+<span class="fc" id="L113">            List&lt;String&gt; details = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L114">            List&lt;RowKey&gt; missing = baseline.keySet().stream()</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">                    .filter(key -&gt; !counts.containsKey(key))</span>
+<span class="fc" id="L116">                    .sorted(RowKey.ORDER)</span>
+<span class="fc" id="L117">                    .toList();</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">            if (!missing.isEmpty()) {</span>
+<span class="fc" id="L119">                details.add(&quot;missing &quot; + describeRows(missing));</span>
+            }
+<span class="fc" id="L121">            List&lt;RowKey&gt; unmatched = counts.keySet().stream()</span>
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">                    .filter(key -&gt; !baseline.containsKey(key))</span>
+<span class="fc" id="L123">                    .sorted(RowKey.ORDER)</span>
+<span class="fc" id="L124">                    .toList();</span>
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">            if (!unmatched.isEmpty()) {</span>
+<span class="fc" id="L126">                details.add(&quot;unmatched &quot; + describeRows(unmatched));</span>
+            }
+<span class="fc" id="L128">            throw new PyValueError(condition + &quot; was not judged on the same rows as baseline: &quot;</span>
+<span class="fc" id="L129">                    + String.join(&quot;; &quot;, details));</span>
+        }
+<span class="fc" id="L131">    }</span>
+
+    public static ObjectNode summarizeScores(List&lt;JsonNode&gt; scores) {
+<span class="fc" id="L134">        Map&lt;String, List&lt;JsonNode&gt;&gt; grouped = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L135">        int index = 0;</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        for (JsonNode row : scores) {</span>
+<span class="fc" id="L137">            index++;</span>
+<span class="fc" id="L138">            validateScore(row, index);</span>
+<span class="fc" id="L139">            grouped.computeIfAbsent(row.get(&quot;condition&quot;).textValue(), key -&gt; new ArrayList&lt;&gt;()).add(row);</span>
+<span class="fc" id="L140">        }</span>
+<span class="pc bpc" id="L141" title="2 of 4 branches missed.">        if (!grouped.containsKey(&quot;baseline&quot;) || !grouped.containsKey(&quot;candidate&quot;)) {</span>
+<span class="nc" id="L142">            throw new PyValueError(&quot;Scores must include baseline and candidate conditions&quot;);</span>
+        }
+<span class="fc" id="L144">        checkPairing(grouped);</span>
+
+<span class="fc" id="L146">        ObjectNode conditions = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L147">        Map&lt;String, Map&lt;String, Double&gt;&gt; means = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L148">        List&lt;String&gt; orderedConditions = grouped.keySet().stream().sorted(PythonStr.CODE_POINT_ORDER).toList();</span>
+
+<span class="fc bfc" id="L150" title="All 2 branches covered.">        for (String condition : orderedConditions) {</span>
+<span class="fc" id="L151">            List&lt;JsonNode&gt; rows = grouped.get(condition);</span>
+<span class="fc" id="L152">            Map&lt;String, Double&gt; metrics = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">            for (String metric : WEIGHTS.keySet()) {</span>
+<span class="fc" id="L154">                List&lt;Double&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">                for (JsonNode row : rows) {</span>
+<span class="fc" id="L156">                    values.add(PythonValue.numericValue(row.get(metric)));</span>
+<span class="fc" id="L157">                }</span>
+<span class="fc" id="L158">                metrics.put(metric, PythonSum.sum(values) / rows.size());</span>
+<span class="fc" id="L159">            }</span>
+<span class="fc" id="L160">            List&lt;Double&gt; terms = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">            for (Map.Entry&lt;String, Double&gt; entry : WEIGHTS.entrySet()) {</span>
+<span class="fc" id="L162">                terms.add(metrics.get(entry.getKey()) * entry.getValue());</span>
+<span class="fc" id="L163">            }</span>
+<span class="fc" id="L164">            double weighted = PythonSum.sum(terms);</span>
+<span class="fc" id="L165">            long blocking = rows.stream().filter(row -&gt; PythonValue.isTruthy(row.get(&quot;blocker&quot;))).count();</span>
+
+<span class="fc" id="L167">            ObjectNode summary = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L168">            summary.put(&quot;rows&quot;, rows.size());</span>
+<span class="fc" id="L169">            metrics.forEach(summary::put);</span>
+<span class="fc" id="L170">            summary.put(&quot;weighted_score&quot;, weighted);</span>
+<span class="fc" id="L171">            summary.put(&quot;blocking_findings&quot;, blocking);</span>
+
+<span class="fc" id="L173">            conditions.set(condition, summary);</span>
+<span class="fc" id="L174">            means.put(condition, metrics);</span>
+<span class="fc" id="L175">        }</span>
+
+<span class="fc" id="L177">        ObjectNode baseline = (ObjectNode) conditions.get(&quot;baseline&quot;);</span>
+<span class="fc" id="L178">        ObjectNode candidate = (ObjectNode) conditions.get(&quot;candidate&quot;);</span>
+<span class="fc" id="L179">        ArrayNode reasons = PythonJson.MAPPER.createArrayNode();</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">        if (candidate.get(&quot;blocking_findings&quot;).longValue() != 0) {</span>
+<span class="fc" id="L181">            reasons.add(&quot;Candidate has blocking safety or correctness findings.&quot;);</span>
+        }
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">        if (candidate.get(&quot;correctness&quot;).doubleValue() &lt; baseline.get(&quot;correctness&quot;).doubleValue() - 0.1) {</span>
+<span class="nc" id="L184">            reasons.add(&quot;Candidate correctness regressed by more than 0.1 points.&quot;);</span>
+        }
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">        if (candidate.get(&quot;safety&quot;).doubleValue() &lt; baseline.get(&quot;safety&quot;).doubleValue() - 0.1) {</span>
+<span class="nc" id="L187">            reasons.add(&quot;Candidate safety regressed by more than 0.1 points.&quot;);</span>
+        }
+<span class="fc bfc" id="L189" title="All 2 branches covered.">        if (candidate.get(&quot;weighted_score&quot;).doubleValue() &lt;= baseline.get(&quot;weighted_score&quot;).doubleValue()) {</span>
+<span class="fc" id="L190">            reasons.add(&quot;Candidate weighted score did not beat baseline.&quot;);</span>
+        }
+
+<span class="fc" id="L193">        ObjectNode weights = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L194">        WEIGHTS.forEach(weights::put);</span>
+
+<span class="fc" id="L196">        ObjectNode gate = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L197">        gate.put(&quot;passed&quot;, reasons.isEmpty());</span>
+<span class="fc" id="L198">        gate.set(&quot;reasons&quot;, reasons);</span>
+
+<span class="fc" id="L200">        ObjectNode result = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L201">        result.set(&quot;weights&quot;, weights);</span>
+<span class="fc" id="L202">        result.set(&quot;conditions&quot;, conditions);</span>
+<span class="fc" id="L203">        result.set(&quot;release_gate&quot;, gate);</span>
+<span class="fc" id="L204">        return result;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

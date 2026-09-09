@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProcRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">ProcRunner.java</span></div><h1>ProcRunner.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/** Port of {@code subprocess.run(..., capture_output=True, text=True)}. */
+public final class ProcRunner {
+
+<span class="fc" id="L16">    private static final boolean WINDOWS =</span>
+<span class="fc" id="L17">            System.getProperty(&quot;os.name&quot;, &quot;&quot;).toLowerCase(Locale.ROOT).startsWith(&quot;windows&quot;);</span>
+
+    private ProcRunner() {}
+
+    public static ProcResult run(List&lt;String&gt; command, Path cwd) {
+<span class="fc" id="L22">        return run(command, cwd, null, null);</span>
+    }
+
+    public static ProcResult run(List&lt;String&gt; command, Path cwd, Map&lt;String, String&gt; env, String input) {
+<span class="fc" id="L26">        return execute(command, cwd, env, input);</span>
+    }
+
+    /**
+     * Equivalent of {@code subprocess.run(..., shell=True)}, which Java has no direct support for.
+     * The command string is handed to the platform shell exactly as Python would hand it to
+     * {@code /bin/sh} (or {@code cmd.exe} on Windows).
+     */
+    public static ProcResult runShell(String command, Path cwd, Map&lt;String, String&gt; env, String input) {
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        List&lt;String&gt; argv = WINDOWS ? List.of(&quot;cmd.exe&quot;, &quot;/c&quot;, command) : List.of(&quot;/bin/sh&quot;, &quot;-c&quot;, command);</span>
+<span class="fc" id="L36">        return execute(argv, cwd, env, input);</span>
+    }
+
+    private static ProcResult execute(List&lt;String&gt; command, Path cwd, Map&lt;String, String&gt; env, String input) {
+<span class="fc" id="L40">        Path outFile = null;</span>
+<span class="fc" id="L41">        Path errFile = null;</span>
+        try {
+            // Redirecting to files rather than pipes removes any chance of the classic
+            // fill-the-pipe-buffer deadlock when a child writes heavily to both streams.
+<span class="fc" id="L45">            outFile = Files.createTempFile(&quot;adhd-stdout-&quot;, &quot;.txt&quot;);</span>
+<span class="fc" id="L46">            errFile = Files.createTempFile(&quot;adhd-stderr-&quot;, &quot;.txt&quot;);</span>
+
+<span class="fc" id="L48">            ProcessBuilder builder = new ProcessBuilder(command);</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">            if (cwd != null) {</span>
+<span class="fc" id="L50">                builder.directory(cwd.toFile());</span>
+            }
+<span class="fc bfc" id="L52" title="All 2 branches covered.">            if (env != null) {</span>
+<span class="fc" id="L53">                builder.environment().clear();</span>
+<span class="fc" id="L54">                builder.environment().putAll(env);</span>
+            }
+<span class="fc" id="L56">            builder.redirectOutput(outFile.toFile());</span>
+<span class="fc" id="L57">            builder.redirectError(errFile.toFile());</span>
+
+<span class="fc" id="L59">            Process process = builder.start();</span>
+<span class="fc" id="L60">            try (OutputStream stdin = process.getOutputStream()) {</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">                if (input != null) {</span>
+<span class="fc" id="L62">                    stdin.write(input.getBytes(StandardCharsets.UTF_8));</span>
+                }
+<span class="nc" id="L64">            } catch (IOException ignored) {</span>
+                // A child that exits without reading stdin gives EPIPE; Python swallows it too.
+<span class="fc" id="L66">            }</span>
+
+<span class="fc" id="L68">            int code = process.waitFor();</span>
+<span class="fc" id="L69">            return new ProcResult(code, readUniversal(outFile), readUniversal(errFile));</span>
+<span class="nc" id="L70">        } catch (IOException exc) {</span>
+<span class="nc" id="L71">            throw new UncheckedIOException(exc);</span>
+<span class="nc" id="L72">        } catch (InterruptedException exc) {</span>
+<span class="nc" id="L73">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L74">            throw new PyRuntimeError(&quot;Interrupted while waiting for &quot; + command, exc);</span>
+        } finally {
+<span class="fc" id="L76">            deleteQuietly(outFile);</span>
+<span class="fc" id="L77">            deleteQuietly(errFile);</span>
+        }
+    }
+
+    /**
+     * {@code text=True} wraps the pipes in a TextIOWrapper with {@code newline=None}, which enables
+     * universal-newline translation. Reproducing it keeps output identical across platforms.
+     */
+    private static String readUniversal(Path path) throws IOException {
+<span class="fc" id="L86">        String raw = Files.readString(path, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L87">        return raw.replace(&quot;\r\n&quot;, &quot;\n&quot;).replace('\r', '\n');</span>
+    }
+
+    private static void deleteQuietly(Path path) {
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">        if (path == null) {</span>
+<span class="nc" id="L92">            return;</span>
+        }
+        try {
+<span class="fc" id="L95">            Files.deleteIfExists(path);</span>
+<span class="nc" id="L96">        } catch (IOException ignored) {</span>
+            // Temp-file cleanup is best effort.
+<span class="fc" id="L98">        }</span>
+<span class="fc" id="L99">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

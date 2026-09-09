@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RunEvals.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.evals</a> &gt; <span class="el_source">RunEvals.java</span></div><h1>RunEvals.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.evals;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.ayghri.adhd.util.JsonLines;
+import io.github.ayghri.adhd.util.PyValueError;
+import io.github.ayghri.adhd.util.PythonJson;
+import io.github.ayghri.adhd.util.RepoRoot;
+
+import java.io.PrintStream;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Command line entry point, mirroring the {@code argparse} surface of {@code run_evals.py}. */
+public final class RunEvals {
+
+    static final String PROG = &quot;run_evals.py&quot;;
+<span class="fc" id="L19">    private static final List&lt;String&gt; COMMANDS = List.of(&quot;validate&quot;, &quot;plan&quot;, &quot;score&quot;, &quot;run&quot;);</span>
+<span class="fc" id="L20">    private static final List&lt;String&gt; CONDITION_CHOICES = List.of(&quot;baseline&quot;, &quot;candidate&quot;, &quot;comparator&quot;);</span>
+
+    private RunEvals() {}
+
+    public static void main(String[] argv) {
+        int code;
+        try {
+<span class="nc" id="L27">            code = run(argv, System.out, System.err, RepoRoot.resolve());</span>
+<span class="nc" id="L28">        } catch (RuntimeException exc) {</span>
+<span class="nc" id="L29">            exc.printStackTrace(System.err);</span>
+<span class="nc" id="L30">            code = 1;</span>
+<span class="nc" id="L31">        }</span>
+<span class="nc" id="L32">        System.out.flush();</span>
+<span class="nc" id="L33">        System.err.flush();</span>
+<span class="nc" id="L34">        System.exit(code);</span>
+<span class="nc" id="L35">    }</span>
+
+    public static int run(String[] argv, PrintStream out, PrintStream err, Path root) {
+        try {
+<span class="fc" id="L39">            return dispatch(argv, out, err, root);</span>
+<span class="fc" id="L40">        } catch (Cli.HelpRequested exc) {</span>
+<span class="fc" id="L41">            out.print(exc.help());</span>
+<span class="fc" id="L42">            return 0;</span>
+<span class="fc" id="L43">        } catch (Cli.UsageError exc) {</span>
+<span class="fc" id="L44">            err.println(exc.usage());</span>
+<span class="fc" id="L45">            err.println(exc.prog() + &quot;: error: &quot; + exc.getMessage());</span>
+<span class="fc" id="L46">            return 2;</span>
+        }
+    }
+
+    private static int dispatch(String[] argv, PrintStream out, PrintStream err, Path root) {
+<span class="fc" id="L51">        Cli cli = new Cli(argv);</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (cli.wantsTopLevelHelp()) {</span>
+<span class="fc" id="L53">            out.print(Cli.topLevelHelp());</span>
+<span class="fc" id="L54">            return 0;</span>
+        }
+
+<span class="fc" id="L57">        String command = cli.nextCommand(COMMANDS);</span>
+<span class="fc" id="L58">        Path defaultCases = root.resolve(&quot;evals&quot;).resolve(&quot;cases.jsonl&quot;);</span>
+
+<span class="pc bpc" id="L60" title="1 of 5 branches missed.">        switch (command) {</span>
+            case &quot;validate&quot; -&gt; {
+<span class="fc" id="L62">                EvalOptions options = new EvalOptions();</span>
+<span class="fc" id="L63">                cli.allowAbbrev(List.of(&quot;--cases&quot;));</span>
+<span class="fc" id="L64">                options.cases = cli.optionalPath(&quot;--cases&quot;, defaultCases);</span>
+<span class="fc" id="L65">                cli.finish();</span>
+<span class="fc" id="L66">                return validate(options, out, err);</span>
+            }
+            case &quot;plan&quot; -&gt; {
+<span class="fc" id="L69">                EvalOptions options = new EvalOptions();</span>
+<span class="fc" id="L70">                cli.allowAbbrev(List.of(&quot;--cases&quot;, &quot;--trials&quot;, &quot;--include-comparator&quot;));</span>
+<span class="fc" id="L71">                options.cases = cli.optionalPath(&quot;--cases&quot;, defaultCases);</span>
+<span class="fc" id="L72">                options.trials = cli.optionalInt(&quot;--trials&quot;, 3);</span>
+<span class="fc" id="L73">                options.includeComparator = cli.flag(&quot;--include-comparator&quot;);</span>
+<span class="fc" id="L74">                cli.finish();</span>
+<span class="fc" id="L75">                return plan(options, out);</span>
+            }
+            case &quot;score&quot; -&gt; {
+<span class="fc" id="L78">                EvalOptions options = new EvalOptions();</span>
+<span class="fc" id="L79">                cli.allowAbbrev(List.of());</span>
+<span class="fc" id="L80">                options.scores = cli.positionalPath(&quot;scores&quot;);</span>
+<span class="fc" id="L81">                cli.finish();</span>
+<span class="fc" id="L82">                return score(options, out);</span>
+            }
+            case &quot;run&quot; -&gt; {
+<span class="fc" id="L85">                EvalOptions options = new EvalOptions();</span>
+<span class="fc" id="L86">                cli.allowAbbrev(List.of(&quot;--cases&quot;, &quot;--runner-config&quot;, &quot;--runner&quot;, &quot;--condition&quot;,</span>
+                        &quot;--condition-skill&quot;, &quot;--case&quot;, &quot;--trials&quot;, &quot;--retries&quot;, &quot;--budget-usd&quot;,
+                        &quot;--allow-unmetered&quot;, &quot;--output&quot;));
+<span class="fc" id="L89">                options.cases = cli.optionalPath(&quot;--cases&quot;, defaultCases);</span>
+<span class="fc" id="L90">                options.runnerConfig = cli.optionalPath(</span>
+<span class="fc" id="L91">                        &quot;--runner-config&quot;, root.resolve(&quot;evals&quot;).resolve(&quot;runners.example.json&quot;));</span>
+<span class="fc" id="L92">                options.runner = cli.requiredString(&quot;--runner&quot;);</span>
+<span class="fc" id="L93">                options.condition = cli.requiredChoice(&quot;--condition&quot;, CONDITION_CHOICES);</span>
+<span class="fc" id="L94">                options.conditionSkill = cli.optionalPath(&quot;--condition-skill&quot;, null);</span>
+<span class="fc" id="L95">                options.caseFilter = cli.appendString(&quot;--case&quot;);</span>
+<span class="fc" id="L96">                options.trials = cli.optionalInt(&quot;--trials&quot;, 3);</span>
+<span class="fc" id="L97">                options.retries = cli.optionalInt(&quot;--retries&quot;, 2);</span>
+<span class="fc" id="L98">                options.budgetUsd = cli.optionalDouble(&quot;--budget-usd&quot;, 25.0);</span>
+<span class="fc" id="L99">                options.allowUnmetered = cli.flag(&quot;--allow-unmetered&quot;);</span>
+<span class="fc" id="L100">                options.output = cli.requiredPath(&quot;--output&quot;);</span>
+<span class="fc" id="L101">                cli.finish();</span>
+<span class="fc" id="L102">                return EvalRunner.runEvaluations(options, root, out, err);</span>
+            }
+<span class="nc" id="L104">            default -&gt; throw cli.usageError(&quot;unknown command&quot;);</span>
+        }
+    }
+
+    static int validate(EvalOptions options, PrintStream out, PrintStream err) {
+<span class="fc" id="L109">        List&lt;String&gt; errors = CaseValidator.validateCases(JsonLines.readJsonl(options.cases));</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (!errors.isEmpty()) {</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">            for (String message : errors) {</span>
+<span class="fc" id="L112">                err.println(&quot;ERROR: &quot; + message);</span>
+<span class="fc" id="L113">            }</span>
+<span class="fc" id="L114">            return 1;</span>
+        }
+<span class="fc" id="L116">        out.println(&quot;Evaluation cases are valid.&quot;);</span>
+<span class="fc" id="L117">        return 0;</span>
+    }
+
+    static int plan(EvalOptions options, PrintStream out) {
+<span class="fc" id="L121">        List&lt;JsonNode&gt; cases = JsonLines.readJsonl(options.cases);</span>
+<span class="fc" id="L122">        List&lt;String&gt; errors = CaseValidator.validateCases(cases);</span>
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">        if (!errors.isEmpty()) {</span>
+<span class="nc" id="L124">            throw new PyValueError(String.join(&quot;\n&quot;, errors));</span>
+        }
+
+<span class="fc" id="L127">        List&lt;String&gt; conditions = new ArrayList&lt;&gt;(List.of(&quot;baseline&quot;, &quot;candidate&quot;));</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">        if (options.includeComparator) {</span>
+<span class="fc" id="L129">            conditions.add(&quot;comparator&quot;);</span>
+        }
+
+<span class="fc bfc" id="L132" title="All 2 branches covered.">        for (int trial = 1; trial &lt;= options.trials; trial++) {</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">            for (JsonNode item : cases) {</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">                for (String condition : conditions) {</span>
+<span class="fc" id="L135">                    ObjectNode row = PythonJson.MAPPER.createObjectNode();</span>
+<span class="fc" id="L136">                    row.put(&quot;case_id&quot;, item.get(&quot;id&quot;).textValue());</span>
+<span class="fc" id="L137">                    row.put(&quot;trial&quot;, trial);</span>
+<span class="fc" id="L138">                    row.put(&quot;condition&quot;, condition);</span>
+<span class="fc" id="L139">                    out.println(PythonJson.dumps(row));</span>
+<span class="fc" id="L140">                }</span>
+<span class="fc" id="L141">            }</span>
+        }
+<span class="fc" id="L143">        return 0;</span>
+    }
+
+    static int score(EvalOptions options, PrintStream out) {
+<span class="fc" id="L147">        JsonNode summary = ScoreSummarizer.summarizeScores(JsonLines.readJsonl(options.scores));</span>
+<span class="fc" id="L148">        out.println(PythonJson.dumpsIndented(summary, 2));</span>
+<span class="fc" id="L149">        return 0;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

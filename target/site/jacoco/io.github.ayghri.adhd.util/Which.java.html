@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Which.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">Which.java</span></div><h1>Which.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/** Port of {@code shutil.which}. */
+public final class Which {
+
+<span class="fc" id="L13">    private static final boolean WINDOWS =</span>
+<span class="fc" id="L14">            System.getProperty(&quot;os.name&quot;, &quot;&quot;).toLowerCase(Locale.ROOT).startsWith(&quot;windows&quot;);</span>
+
+    private Which() {}
+
+    /** Returns the resolved executable path, or {@code null} when the command is not on PATH. */
+    public static String which(String command) {
+<span class="pc bpc" id="L20" title="1 of 4 branches missed.">        if (command.contains(File.separator) || command.contains(&quot;/&quot;)) {</span>
+<span class="fc" id="L21">            Path direct = Path.of(command);</span>
+<span class="pc bpc" id="L22" title="1 of 2 branches missed.">            return isExecutable(direct) ? direct.toString() : null;</span>
+        }
+
+<span class="fc" id="L25">        String path = System.getenv(&quot;PATH&quot;);</span>
+<span class="pc bpc" id="L26" title="2 of 4 branches missed.">        if (path == null || path.isEmpty()) {</span>
+<span class="nc" id="L27">            return null;</span>
+        }
+
+<span class="fc bfc" id="L30" title="All 2 branches covered.">        for (String entry : path.split(File.pathSeparator)) {</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">            if (entry.isEmpty()) {</span>
+<span class="nc" id="L32">                continue;</span>
+            }
+<span class="fc bfc" id="L34" title="All 2 branches covered.">            for (String candidateName : withExtensions(command)) {</span>
+<span class="fc" id="L35">                Path candidate = Path.of(entry).resolve(candidateName);</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">                if (isExecutable(candidate)) {</span>
+<span class="fc" id="L37">                    return candidate.toString();</span>
+                }
+<span class="fc" id="L39">            }</span>
+        }
+<span class="fc" id="L41">        return null;</span>
+    }
+
+    /** On Windows a bare name has to be probed against every PATHEXT suffix. */
+    private static List&lt;String&gt; withExtensions(String command) {
+<span class="fc" id="L46">        List&lt;String&gt; names = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (!WINDOWS) {</span>
+<span class="fc" id="L48">            names.add(command);</span>
+<span class="fc" id="L49">            return names;</span>
+        }
+<span class="nc" id="L51">        String pathext = System.getenv(&quot;PATHEXT&quot;);</span>
+<span class="nc bnc" id="L52" title="All 4 branches missed.">        if (pathext == null || pathext.isBlank()) {</span>
+<span class="nc" id="L53">            pathext = &quot;.COM;.EXE;.BAT;.CMD&quot;;</span>
+        }
+<span class="nc" id="L55">        String lower = command.toLowerCase(Locale.ROOT);</span>
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        for (String ext : pathext.split(&quot;;&quot;)) {</span>
+<span class="nc bnc" id="L57" title="All 4 branches missed.">            if (!ext.isBlank() &amp;&amp; lower.endsWith(ext.toLowerCase(Locale.ROOT))) {</span>
+<span class="nc" id="L58">                names.add(command);</span>
+<span class="nc" id="L59">                return names;</span>
+            }
+        }
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        for (String ext : pathext.split(&quot;;&quot;)) {</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">            if (!ext.isBlank()) {</span>
+<span class="nc" id="L64">                names.add(command + ext);</span>
+            }
+        }
+<span class="nc" id="L67">        return names;</span>
+    }
+
+    private static boolean isExecutable(Path candidate) {
+<span class="pc bpc" id="L71" title="1 of 4 branches missed.">        return Files.isRegularFile(candidate) &amp;&amp; Files.isExecutable(candidate);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

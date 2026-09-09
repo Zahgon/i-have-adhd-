@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PythonStr.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">i-have-adhd tools</a> &gt; <a href="index.source.html" class="el_package">io.github.ayghri.adhd.util</a> &gt; <span class="el_source">PythonStr.java</span></div><h1>PythonStr.java</h1><pre class="source lang-java linenums">package io.github.ayghri.adhd.util;
+
+import java.util.Comparator;
+
+/** String helpers whose Java defaults differ from Python's. */
+public final class PythonStr {
+
+    private PythonStr() {}
+
+    /**
+     * Python's {@code repr()} of a string, used wherever the source formats with {@code !r}.
+     *
+     * &lt;p&gt;Python prefers single quotes and only switches to double quotes when the value contains a
+     * single quote but no double quote. Printable non-ASCII characters are left raw (Python 3
+     * behaviour); control characters become {@code \\xNN}.
+     */
+    public static String repr(String value) {
+<span class="pc bpc" id="L18" title="3 of 4 branches missed.">        char quote = value.indexOf('\'') &gt;= 0 &amp;&amp; value.indexOf('&quot;') &lt; 0 ? '&quot;' : '\'';</span>
+<span class="fc" id="L19">        StringBuilder sb = new StringBuilder();</span>
+<span class="fc" id="L20">        sb.append(quote);</span>
+<span class="fc bfc" id="L21" title="All 2 branches covered.">        for (int i = 0; i &lt; value.length(); i++) {</span>
+<span class="fc" id="L22">            char c = value.charAt(i);</span>
+<span class="pc bpc" id="L23" title="2 of 4 branches missed.">            if (c == quote || c == '\\') {</span>
+<span class="nc" id="L24">                sb.append('\\').append(c);</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">            } else if (c == '\n') {</span>
+<span class="nc" id="L26">                sb.append(&quot;\\n&quot;);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">            } else if (c == '\r') {</span>
+<span class="nc" id="L28">                sb.append(&quot;\\r&quot;);</span>
+<span class="pc bpc" id="L29" title="1 of 2 branches missed.">            } else if (c == '\t') {</span>
+<span class="nc" id="L30">                sb.append(&quot;\\t&quot;);</span>
+<span class="pc bpc" id="L31" title="2 of 4 branches missed.">            } else if (c &lt; 0x20 || c == 0x7f) {</span>
+<span class="nc" id="L32">                sb.append(String.format(java.util.Locale.ROOT, &quot;\\x%02x&quot;, (int) c));</span>
+            } else {
+<span class="fc" id="L34">                sb.append(c);</span>
+            }
+        }
+<span class="fc" id="L37">        sb.append(quote);</span>
+<span class="fc" id="L38">        return sb.toString();</span>
+    }
+
+    /**
+     * Python's {@code sorted()} orders strings by Unicode code point. Java's natural {@code String}
+     * ordering compares UTF-16 units, which puts unpaired-surrogate-range characters before
+     * supplementary ones and so disagrees with Python above {@code U+FFFF}. Every place the source
+     * called {@code sorted()} on strings uses this comparator instead.
+     */
+<span class="fc" id="L47">    public static final Comparator&lt;String&gt; CODE_POINT_ORDER = (a, b) -&gt; {</span>
+<span class="fc" id="L48">        int i = 0;</span>
+<span class="fc" id="L49">        int j = 0;</span>
+<span class="pc bpc" id="L50" title="1 of 4 branches missed.">        while (i &lt; a.length() &amp;&amp; j &lt; b.length()) {</span>
+<span class="fc" id="L51">            int ca = a.codePointAt(i);</span>
+<span class="fc" id="L52">            int cb = b.codePointAt(j);</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">            if (ca != cb) {</span>
+<span class="fc" id="L54">                return Integer.compare(ca, cb);</span>
+            }
+<span class="fc" id="L56">            i += Character.charCount(ca);</span>
+<span class="fc" id="L57">            j += Character.charCount(cb);</span>
+<span class="fc" id="L58">        }</span>
+<span class="fc" id="L59">        return Integer.compare(a.length() - i, b.length() - j);</span>
+    };
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Entry point for the evaluation harness, replacing scripts/run_evals.py.
+# Usage mirrors the Python CLI exactly: run_evals {validate,plan,score,run} [...]
+set -e
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(dirname -- "$script_dir")
+jar="$root/target/i-have-adhd-tools.jar"
+
+if [ ! -f "$jar" ]; then
+    echo "Build the tools first: mvn -f \"$root/pom.xml\" package" >&2
+    exit 1
+fi
+
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    java_bin="$JAVA_HOME/bin/java"
+else
+    java_bin=java
+fi
+
+exec "$java_bin" -Dfile.encoding=UTF-8 -Duser.language=en -Duser.country=US \
+    -Dadhd.root="$root" \
+    -cp "$jar" io.github.ayghri.adhd.evals.RunEvals "$@"
